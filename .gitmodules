@@ -1,0 +1,4 @@
+[submodule "vendor/UxPlay"]
+	path = vendor/UxPlay
+	url = https://github.com/FDH2/UxPlay.git
+	ignore = dirty

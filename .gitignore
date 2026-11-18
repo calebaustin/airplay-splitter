@@ -1,0 +1,13 @@
+.DS_Store
+# Third-party reference code used while designing (large, not part of the app)
+Sample Sources/
+# Build output
+dist/
+build/
+app/.build/
+vendor/doubletake-main/bin/
+# Early command-line prototype, replaced by the app
+splitter.sh
+# Never commit pairing credentials
+credentials.json
+*.log

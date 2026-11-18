@@ -1,0 +1,66 @@
+import SwiftUI
+
+@main
+struct AirPlaySplitterApp: App {
+    @StateObject private var model = SplitterModel()
+
+    init() {
+        // Developer check: `AirPlay Splitter --rtp-selftest` streams the test
+        // card to the relay port for 8 s and exits (no daemon, no UI).
+        if CommandLine.arguments.contains("--rtp-selftest") {
+            let s = ScreenStreamer(rtpPort: SplitterModel.rtpPort)
+            do { try s.startTestPattern() } catch { print(error); exit(1) }
+            RunLoop.main.run(until: Date().addingTimeInterval(8))
+            s.stop()
+            exit(0)
+        }
+        // Developer check: `--render-menu out.png` draws the menu with sample data.
+        if let i = CommandLine.arguments.firstIndex(of: "--render-menu"), i + 1 < CommandLine.arguments.count {
+            MainActor.assumeIsolated { renderMenu(to: CommandLine.arguments[i + 1]) }
+            exit(0)
+        }
+    }
+
+    @MainActor private func renderMenu(to path: String) {
+        let m = SplitterModel(preview: true)
+        let dev = { (n: String, model: String, ip: String) in
+            DaemonClient.Device(name: n, model: model, ip: ip, port: 7000, device_id: ip) }
+        m.tvs = [dev("[LG] webOS TV UQ7070ZUE", "LG", "10.0.0.5"), dev("Bonus Room", "UTU7000", "10.0.0.184"),
+                 dev("Family Room", "UTU7000", "10.0.0.186"), dev("Garage", "AppleTV11,1", "10.0.0.7"),
+                 dev("Living Room", "AppleTV14,1", "10.0.0.8")]
+        m.selected = ["10.0.0.5", "10.0.0.184", "10.0.0.186"]
+        m.streams = ["10.0.0.184": .init(device: "Bonus Room", device_ip: "10.0.0.184", state: "streaming", width: nil, height: nil, encoder: nil),
+                     "10.0.0.186": .init(device: "Family Room", device_ip: "10.0.0.186", state: "streaming", width: nil, height: nil, encoder: nil)]
+        m.pinFor = m.tvs[0]
+        m.displays = [.init(id: 1, name: "VY249 (1920×1080)")]
+        m.source = .display(1)
+        m.hasScreenAccess = true
+        // ImageRenderer can't draw AppKit-backed controls; host it in a window.
+        _ = NSApplication.shared
+        let host = NSHostingView(rootView: SplitterMenu(model: m))
+        let size = host.fittingSize
+        host.frame = CGRect(origin: .zero, size: size)
+        let win = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        win.appearance = NSAppearance(named: CommandLine.arguments.contains("--dark") ? .darkAqua : .aqua)
+        let effect = NSVisualEffectView(frame: host.frame)
+        effect.material = .popover
+        effect.state = .active
+        effect.addSubview(host)
+        win.contentView = effect
+        win.setFrameOrigin(CGPoint(x: -10_000, y: -10_000))
+        win.orderFrontRegardless()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        guard let rep = effect.bitmapImageRepForCachingDisplay(in: effect.bounds) else { return }
+        effect.cacheDisplay(in: effect.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
+
+    var body: some Scene {
+        MenuBarExtra {
+            SplitterMenu(model: model)
+        } label: {
+            Image(systemName: model.selected.isEmpty ? "rectangle.on.rectangle" : "rectangle.on.rectangle.fill")
+        }
+        .menuBarExtraStyle(.window)
+    }
+}

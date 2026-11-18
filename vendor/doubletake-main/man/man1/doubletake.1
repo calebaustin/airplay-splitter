@@ -1,0 +1,263 @@
+.TH doubletake 1 "November 2026" "doubletake" "User Commands"
+.SH NAME
+doubletake \- AirPlay screen mirroring sender for Linux
+.SH SYNOPSIS
+.B doubletake
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B doubletake
+is an AirPlay screen mirroring sender that streams your Linux desktop to Apple TV
+and compatible AirPlay receivers. It supports both Wayland (PipeWire/xdg-desktop-portal)
+and X11 screen capture with H.264 or capability-gated HEVC Main10 encoding.
+.PP
+The \fBdoubletake\fR binary dynamically links GStreamer and can adjust
+video quality while streaming.
+.PP
+Default builds support ALAC audio and AAC-ELD through the external FDK-AAC
+library. On Linux, the library is loaded when installed; otherwise ALAC is
+used when offered. The selected codec must be advertised by the receiver.
+.SH FEATURES
+.IP \(bu 2
+Full AirPlay mirroring protocol (RTSP/HTTP + encrypted video stream)
+.IP \(bu 2
+FairPlay SAP authentication
+.IP \(bu 2
+SRP-6a pairing with PIN and persistent credential storage
+.IP \(bu 2
+H.264 encoding with NVENC, VA-API, V4L2 stateful encoders, OpenH264, and x264
+.IP \(bu 2
+Capability-gated HEVC Main10/high-resolution encoding with NVENC or x265
+.IP \(bu 2
+ChaCha20-Poly1305 stream encryption
+.IP \(bu 2
+mDNS device discovery
+.IP \(bu 2
+Daemon mode with multi-target streaming control via
+.B doubletake-ctl
+.SH OPTIONS
+.TP
+.B \-target \fIADDRESS\fR
+Connect to a specific AirPlay receiver by IP address or hostname (skips mDNS discovery)
+.TP
+.B \-device-id \fIID\fR
+Expected receiver device ID. Use the saved pairing for this receiver and refuse
+a device reporting a different ID when that pairing exists. Interactive
+discovery supplies an expected ID automatically. Without one, an unknown
+reported device ID is treated as a first connection.
+.TP
+.B \-port \fIPORT\fR
+AirPlay port (default: 7000)
+.TP
+.B \-code \fICODE\fR
+Pairing code shown on the receiver; prefer
+.BR DOUBLETAKE_CODE .
+.TP
+.B \-port-range \fIMIN-MAX\fR
+Confine local timing and audio UDP sockets to a range of at least three ports,
+including streams started in daemon mode. Reserve three available ports per
+simultaneous receiver. See
+.B FIREWALL
+below.
+.TP
+.B \-pair
+Force new pairing even if credentials exist
+.IP
+Saved PIN/password pairings authenticate the receiver on reconnect. Older
+credentials without a receiver key require pairing again once. A failed
+identity check stops the connection; it never falls back to unauthenticated
+pairing. After resetting or replacing a receiver, use this option and enter
+the new on-screen code to establish its replacement identity.
+.TP
+.B \-cred-backend \fIBACKEND\fR
+Credential storage backend: \fBfile\fR or \fBkeyring\fR (default: file)
+.TP
+.B \-creds \fIPATH\fR
+Path to credentials file (default: ~/.config/doubletake/credentials.json)
+.TP
+.B \-fps \fIFPS\fR
+Frames per second (default: 30)
+.TP
+.B \-resolution \fIMAX|WIDTHxHEIGHT[@REFRESH]\fR, \-s \fIMAX|WIDTHxHEIGHT[@REFRESH]\fR
+Select the target encoded canvas. The default, \fBmax\fR, uses the highest
+receiver-advertised mode which the selected local codec path can sustain.
+Explicit dimensions are fitted within the receiver and codec ceilings while
+preserving their requested aspect ratio, then normalized to even dimensions.
+The optional refresh suffix selects the capture frame rate and overrides
+\fB\-fps\fR; for example, \fB\-s 1920x1080@60\fR.
+.TP
+.B \-bitrate \fIKBPS\fR
+Target bitrate in kbps. Zero selects an automatic resolution/FPS budget. The
+default dynamically linked binary adjusts bitrate and frame rate from transport
+telemetry during the session, using the weakest path when receivers share an
+encoder. A
+nonzero value disables runtime adjustment (default: 0)
+.TP
+.B \-target-latency-ms \fIMS\fR
+Override both audio and video playout latency in milliseconds. Zero selects the
+automatic AirPlay policy with separate screen and audio defaults (default: 0).
+Daemon mode instead uses one common 250 ms audio/video budget for all receivers
+when this option is zero. A nonzero value sets that common budget at startup.
+.TP
+.B \-no-audio
+Disable audio for video-only mirroring
+.TP
+.B \-audio-source \fISOURCE\fR
+Audio route: \fBoutput\fR (default) creates a selectable doubletake output;
+\fBmonitor\fR copies the default local output, retaining local playback.
+Select doubletake in sound settings to send applications or system audio to the
+receivers. Its volume and mute controls apply to the captured audio. The daemon
+shares this output across receivers and removes it when the last audio capture
+stops. Requires pactl and GStreamer's pulsesrc with PulseAudio or pipewire-pulse.
+Default routing and existing application routes are not changed automatically.
+Test mode generates a tone without creating an output.
+.TP
+.B \-hwaccel \fIMETHOD\fR
+Encoder preference: \fBauto\fR, \fBnvenc\fR (NVIDIA), \fBvaapi\fR
+(Intel/AMD), \fBv4l2\fR (stateful V4L2 encoders, common on ARM SoCs),
+\fBopenh264\fR (software), or \fBnone\fR (x264, or x265 for
+forced HEVC).
+Only \fBauto\fR tries fallback encoders. An explicit method fails if its
+required GStreamer encoder is unavailable. The default is \fBauto\fR.
+.TP
+.B \-video-codec \fICODEC\fR
+Screen codec: highest usable \fBauto\fR (default), forced \fBh264\fR, or
+forced \fBhevc\fR. Automatic mode selects a receiver-advertised high-resolution
+HEVC canvas only after the local NVENC 4K timing preflight succeeds; otherwise
+it retains the ordinary H.264 canvas. Forced HEVC may also use x265.
+Main10 output does not fabricate HDR metadata for an SDR capture source.
+.TP
+.B \-test
+Use synthetic video instead of screen capture. Unless
+.B \-no-audio
+is also set, generate an audio test tone.
+.TP
+.B \-x11-window-id \fIID\fR
+Capture one X11 window by decimal or hexadecimal window ID. This option is used
+only with X11 capture.
+.TP
+.B \-x11-window-name \fINAME\fR
+Capture one X11 window by name. Window IDs are unambiguous, so prefer
+.B \-x11-window-id
+when available.
+.TP
+.B \-no-cursor
+Omit the pointer from screen capture.
+.TP
+.B \-debug
+Enable verbose protocol logging
+.TP
+.B \-daemonize
+Run in daemon mode for multi-target control via
+.B doubletake-ctl
+.TP
+.B \-socket \fIPATH\fR
+Daemon control socket path. The default is
+.IR $XDG_RUNTIME_DIR/doubletake.sock ,
+or
+.I /tmp/doubletake.sock
+when
+.B XDG_RUNTIME_DIR
+is unset.
+.TP
+.B \-help, \-h
+Show command-line help and exit.
+.TP
+.B \-version
+Show the version and source commit, then exit.
+.SH EXAMPLES
+.TP
+Discover and connect to an AirPlay receiver on the network:
+.B doubletake
+.TP
+Connect to a specific AirPlay receiver:
+.B doubletake \-target 192.168.1.77
+.TP
+Pair with a PIN (saves credentials for reuse):
+.B doubletake \-target 192.168.1.77 \-pair \-code 1234
+.TP
+Connect to a receiver with "Require Password" enabled:
+.B DOUBLETAKE_CODE=... doubletake \-target 192.168.1.77
+.TP
+Stream with a custom frame rate and bitrate:
+.B doubletake \-target 192.168.1.77 \-fps 30 \-bitrate 4500
+.TP
+Force lower bitrate on weak Wi-Fi:
+.B doubletake \-target 192.168.1.77 \-bitrate 3000
+.TP
+Use hardware acceleration (NVIDIA):
+.B doubletake \-target 192.168.1.77 \-hwaccel nvenc
+.TP
+Use OpenH264 software encoding:
+.B doubletake \-target 192.168.1.77 \-hwaccel openh264
+.TP
+Run in daemon mode:
+.B doubletake \-daemonize
+.TP
+Debug mode with verbose logging:
+.B doubletake \-target 192.168.1.77 \-debug
+.SH DAEMON MODE
+When run with \fB\-daemonize\fR, doubletake runs as a background service that can control
+multiple simultaneous connections. Use
+.B doubletake-ctl
+to manage the daemon.
+.PP
+Daemon status distinguishes an on-screen PIN from a configured password so UI
+clients can present the appropriate single prompt. Both values remain
+submittable with the compatible
+.B doubletake-ctl pin
+command when exactly one receiver is waiting. For concurrent prompts, use
+.B doubletake-ctl connect \fITARGET\fR \fIPIN-OR-PASSWORD\fR
+to submit a credential to a specific receiver.
+.SH FIREWALL
+For each stream, doubletake binds three consecutive local UDP ports: timing at
+\fIN\fR, audio control and receiver retransmission requests at \fIN+1\fR, and
+outgoing audio data at \fIN+2\fR. Receiver-initiated NTP probes the timing port.
+PTP and sender-initiated NTP do not require a new inbound timing connection,
+but the receiver can still send audio retransmission requests to the control
+port.
+.PP
+The event and video data channels are outbound TCP connections to ports returned
+by the receiver. doubletake does not require an inbound TCP firewall rule.
+Router port forwarding and Internet exposure are not required.
+.PP
+The operating system selects ephemeral UDP ports unless
+.B \-port-range
+is set. On a default-deny host firewall, select a range and allow inbound UDP
+to that range from each receiver or from the trusted LAN subnet. For example:
+.PP
+.B doubletake \-target 192.168.1.77 \-port-range 60000-60010
+.PP
+.B sudo ufw allow from 192.168.1.77 proto udp to any port 60000:60010
+.PP
+Daemon mode shares the configured range among its streams. Reserve at least
+three available ports for every simultaneous receiver.
+.SH REQUIREMENTS
+.IP \(bu 2
+Go 1.25 or later, a C compiler, pkg-config, and GStreamer/FDK-AAC development headers (source builds)
+.IP \(bu 2
+GStreamer 1.16 or later (with plugins-base, plugins-good, plugins-bad, plugins-ugly, libav)
+.IP \(bu 2
+libfdk-aac.so.2 or libfdk-aac.so.1 to enable AAC-ELD audio
+.IP \(bu 2
+pactl and PulseAudio or pipewire-pulse for the selectable audio output
+.IP \(bu 2
+The \fBopenh264\fR method requires the GStreamer \fBopenh264enc\fR element
+.IP \(bu 2
+PipeWire (Wayland) or X11 for screen capture
+.SH FILES
+.TP
+.I ~/.config/doubletake/credentials.json
+Default location for saved AirPlay credentials
+.SH SEE ALSO
+.BR doubletake-ctl (1),
+.BR doubletake-test-receiver (1)
+.SH AUTHOR
+Written by Omar Roth.
+.SH LICENSE
+License LGPLv3+: GNU LGPL version 3 or later.
+.PP
+Releases v0.3.2 and earlier were provided under GPLv3+: GNU GPL version 3 or later.
+.PP
+This is free software: you are free to change and redistribute it.
+.PP
+There is NO WARRANTY, to the extent permitted by law.
