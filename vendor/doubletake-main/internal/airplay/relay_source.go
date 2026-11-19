@@ -7,6 +7,27 @@ import (
 	"sync/atomic"
 )
 
+// RelayAudioPort, when nonzero, replaces the test tone with 16-bit PCM RTP
+// (L16, 44.1 kHz stereo, AirPlay's native rate) received on 127.0.0.1:RelayAudioPort. The app sends it
+// from ScreenCaptureKit audio; UxPlay can send it with -artp.
+var RelayAudioPort int
+
+// VideoOnlyAudioFallback lets a receiver that only accepts AAC-ELD (which
+// needs FDK-AAC, not bundled) connect without audio instead of failing.
+var VideoOnlyAudioFallback bool
+
+func relayAudioSourceArgs(port int) []string {
+	return []string{
+		"udpsrc", "address=127.0.0.1", fmt.Sprintf("port=%d", port),
+		"caps=application/x-rtp,media=audio,clock-rate=44100,encoding-name=L16,channels=2,payload=96",
+		"!", "rtpjitterbuffer", "latency=40", "drop-on-latency=true",
+		"!", "rtpL16depay",
+		// Keep a live, continuous stream when the Mac is silent (ScreenCaptureKit
+		// sends nothing then), so receivers keep their audio clock running.
+		"!", "audiorate", "skip-to-first=true",
+	}
+}
+
 // dropH264SEI is set once the VideoToolbox encoder is selected; see the
 // packetizer. Other encoders keep upstream's SEI passthrough.
 var dropH264SEI atomic.Bool

@@ -30,7 +30,7 @@ struct AirPlaySplitterApp: App {
         // Developer check: `AirPlay Splitter --rtp-selftest` streams the test
         // card to the relay port for 8 s and exits (no daemon, no UI).
         if CommandLine.arguments.contains("--rtp-selftest") {
-            let s = ScreenStreamer(rtpPort: SplitterModel.rtpPort)
+            let s = ScreenStreamer(rtpPort: SplitterModel.rtpPort, audioPort: SplitterModel.audioPort)
             do { try s.startTestPattern() } catch { print(error); exit(1) }
             RunLoop.main.run(until: Date().addingTimeInterval(8))
             s.stop()
@@ -50,6 +50,9 @@ struct AirPlaySplitterApp: App {
         m.tvs = [dev("[LG] webOS TV UQ7070ZUE", "LG", "10.0.0.5"), dev("Bonus Room", "UTU7000", "10.0.0.184"),
                  dev("Family Room", "UTU7000", "10.0.0.186"), dev("Garage", "AppleTV11,1", "10.0.0.7"),
                  dev("Living Room", "AppleTV14,1", "10.0.0.8")]
+            + (CommandLine.arguments.contains("--many")
+               ? [205, 207, 208, 223, 227, 229, 308, 310, 326, 402].map { dev("\($0)", "AppleTV11,1", "10.0.1.\($0 % 250)") }
+               : [])
         m.selected = ["10.0.0.5", "10.0.0.184", "10.0.0.186"]
         m.streams = ["10.0.0.184": .init(device: "Bonus Room", device_ip: "10.0.0.184", state: "streaming", width: nil, height: nil, encoder: nil),
                      "10.0.0.186": .init(device: "Family Room", device_ip: "10.0.0.186", state: "streaming", width: nil, height: nil, encoder: nil)]
@@ -57,6 +60,11 @@ struct AirPlaySplitterApp: App {
         m.displays = [.init(id: 1, name: "VY249 (1920×1080)")]
         m.source = .display(1)
         m.hasScreenAccess = true
+        // Optional `--preview-image file.png` fills the preview thumbnail.
+        if let j = CommandLine.arguments.firstIndex(of: "--preview-image"), j + 1 < CommandLine.arguments.count,
+           let img = NSImage(contentsOfFile: CommandLine.arguments[j + 1]) {
+            m.preview = img.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        }
         // ImageRenderer can't draw AppKit-backed controls; host it in a window.
         _ = NSApplication.shared
         let host = NSHostingView(rootView: SplitterMenu(model: m))

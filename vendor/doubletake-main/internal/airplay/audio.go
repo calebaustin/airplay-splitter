@@ -273,7 +273,10 @@ func StartAudioCaptureWithSource(ctx context.Context, testTone bool, codec Audio
 	}()
 	// Detect audio source
 	var srcArgs []string
-	if testTone {
+	if testTone && RelayAudioPort > 0 {
+		srcArgs = relayAudioSourceArgs(RelayAudioPort)
+		dbg("[AUDIO] relaying L16 audio from 127.0.0.1:%d", RelayAudioPort)
+	} else if testTone {
 		srcArgs = audioTestToneSourceArgs(codecSPF)
 		dbg("[AUDIO] using test tone (440 Hz sine wave, volume=%s, live, spf=%d)", audioTestToneVolume, codecSPF)
 	} else {

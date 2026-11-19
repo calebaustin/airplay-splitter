@@ -50,6 +50,11 @@ final class RTPSender {
         }
     }
 
+    /// One RTP packet with the payload as-is (used for L16 audio).
+    func sendRaw(payload: Data, timestamp: UInt32) {
+        packet(payload: payload, marker: false, ts: timestamp)
+    }
+
     private func packet(payload: Data, marker: Bool, ts: UInt32) {
         var p = Data(capacity: 12 + payload.count)
         p.append(0x80)                                  // V=2

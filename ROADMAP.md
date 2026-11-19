@@ -6,14 +6,10 @@ like a pocket AV control system, not a full display-management app.
 **Rule for every feature:** it has to make getting something onto the screens faster or more reliable. If it
 mostly adds settings, it waits.
 
-## In progress (0.2.0)
+## Done in 0.2.0
 
-- **Everything inside the app.** Bundle GStreamer so installing is a single drag, with no Homebrew.
-  *(Bundler written, not yet wired in.)*
-- **Audio on/off.** Send the Mac's sound to the TVs. *(doubletake side done and tested.)* TVs that only take
-  AAC-ELD audio fall back to video only.
-- **Preview** of what's being shared.
-- **Share one window or part of the screen**, not just a whole display.
+- Everything inside the app (no Homebrew), sound on/off, live preview, window and area sharing, and a
+  scrolling TV list with switched-on TVs pinned to the top.
 
 ## Layout: pages, not a bigger menu
 

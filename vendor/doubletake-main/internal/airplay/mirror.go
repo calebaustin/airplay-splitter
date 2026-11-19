@@ -680,6 +680,12 @@ func (c *AirPlayClient) setupMirrorSessionAttempt(ctx context.Context, cfg Strea
 	clientDeviceID := uuidToMAC(c.sessionID)
 	senderName := pairingClientName()
 	policy, err := compatibilityForReceiver(c.info, c.encrypted, !cfg.NoAudio)
+	if err != nil && !cfg.NoAudio && errors.Is(err, ErrAACELDUnavailable) && VideoOnlyAudioFallback {
+		// AirPlay Splitter: a TV that only takes AAC-ELD still gets video.
+		log.Printf("[SETUP] receiver needs AAC-ELD audio, which this build lacks; streaming video only")
+		cfg.NoAudio = true
+		policy, err = compatibilityForReceiver(c.info, c.encrypted, false)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("negotiate screen audio: %w", err)
 	}

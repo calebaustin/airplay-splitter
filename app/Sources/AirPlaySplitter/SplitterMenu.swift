@@ -7,6 +7,8 @@ enum Tokens {
     static let gap: CGFloat = 12
     static let pad: CGFloat = 14
     static let width: CGFloat = 340
+    static let rowHeight: CGFloat = 40   // one TV row (34pt content + divider)
+    static let pinHeight: CGFloat = 62   // the PIN box under a row
     static let live = Color.green
     static let busy = Color.orange
     static let warn = Color.orange
@@ -51,14 +53,15 @@ struct SplitterMenu: View {
         .frame(width: Tokens.width)
         .glassGroup()
         .task { await model.loadDisplays() }
+        .onAppear { model.previewVisible = true }
+        .onDisappear { model.previewVisible = false }
     }
 
     // MARK: header
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: "rectangle.on.rectangle")
-                .font(.system(size: 15, weight: .semibold))
+            MenuBarIcon(active: true)
                 .foregroundStyle(model.liveCount > 0 ? Tokens.live : .secondary)
                 .frame(width: 30, height: 30)
                 .glass(Circle())
@@ -76,20 +79,20 @@ struct SplitterMenu: View {
         VStack(alignment: .leading, spacing: 6) {
             sectionLabel("Show")
             HStack(spacing: 10) {
-                Image(systemName: model.sourceSymbol)
-                    .foregroundStyle(.secondary).frame(width: 20)
-                Picker("Show", selection: $model.source) {
-                    ForEach(model.displays) { d in
-                        Text(d.name).tag(SplitterModel.Source.display(d.id))
+                previewThumb
+                VStack(alignment: .leading, spacing: 6) {
+                    sourceMenu
+                    Toggle(isOn: $model.sendAudio) {
+                        Label("Sound", systemImage: model.sendAudio ? "speaker.wave.2.fill" : "speaker.slash")
+                            .font(.callout)
                     }
-                    Divider()
-                    Text("iPhone or iPad").tag(SplitterModel.Source.phones)
-                    Text("Test pattern").tag(SplitterModel.Source.testPattern)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .disabled(!model.audioAvailable)
+                    .help("Send this Mac's sound to the TVs too")
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
+            .padding(8)
             .glass(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
             if model.source == .phones {
                 Text("On the iPhone or iPad, open Control Center, tap Screen Mirroring, and choose “AirPlay Splitter”.")
@@ -99,12 +102,58 @@ struct SplitterMenu: View {
         }
     }
 
+    /// What's on the TVs right now, or the source's icon when nothing is live.
+    private var previewThumb: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: Tokens.rowRadius, style: .continuous)
+                .fill(.black.opacity(0.25))
+            if let img = model.preview, !model.selected.isEmpty {
+                Image(decorative: img, scale: 1)
+                    .resizable().aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: model.sourceSymbol).font(.title2).foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 112, height: 63)
+        .clipShape(RoundedRectangle(cornerRadius: Tokens.rowRadius, style: .continuous))
+        .accessibilityLabel("Preview of what's being sent")
+    }
+
+    private var sourceMenu: some View {
+        Menu {
+            Section("Screens") {
+                ForEach(model.displays) { d in
+                    Button { model.chooseDisplay(d.id) } label: {
+                        Label(d.name, systemImage: model.source == .display(d.id) ? "checkmark" : "display")
+                    }
+                }
+            }
+            Section("Part of the screen") {
+                Button { model.chooseWindow() } label: { Label("Choose a Window…", systemImage: "macwindow") }
+                ForEach(model.displays) { d in
+                    Button { model.chooseRegion(on: d.id) } label: {
+                        Label(model.displays.count > 1 ? "Select an Area of \(d.name.components(separatedBy: " (").first ?? "Screen")…"
+                                                       : "Select an Area…", systemImage: "rectangle.dashed")
+                    }
+                }
+            }
+            Section {
+                Button { model.choosePhones() } label: { Label("iPhone or iPad", systemImage: "iphone") }
+                Button { model.chooseTestPattern() } label: { Label("Test Pattern", systemImage: "square.grid.3x3.topleft.filled") }
+            }
+        } label: {
+            Label(model.sourceName, systemImage: model.sourceSymbol).lineLimit(1)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
     // MARK: receivers
 
     private var receiversSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             sectionLabel("Send to")
-            VStack(spacing: 0) {
+            Group {
                 if model.tvs.isEmpty {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
@@ -113,14 +162,55 @@ struct SplitterMenu: View {
                     .font(.callout)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
-                }
-                ForEach(Array(model.tvs.enumerated()), id: \.element.id) { i, tv in
-                    if i > 0 { Divider().opacity(0.5).padding(.leading, 44) }
-                    ReceiverRow(model: model, tv: tv)
+                } else {
+                    // Capped height so the menu always fits under the menu bar,
+                    // however many TVs a building has. Switched-on TVs sort first.
+                    ScrollViewReader { proxy in
+                        ScrollView(.vertical) {
+                            LazyVStack(spacing: 0) {
+                                ForEach(Array(orderedTVs.enumerated()), id: \.element.id) { i, tv in
+                                    if i > 0 { Divider().opacity(0.5).padding(.leading, 44) }
+                                    ReceiverRow(model: model, tv: tv).id(tv.id)
+                                }
+                            }
+                        }
+                        .scrollIndicators(.automatic)
+                        .frame(height: listHeight)
+                        .onChange(of: model.pinFor?.ip) { _, ip in
+                            if let ip { withAnimation { proxy.scrollTo(ip, anchor: .center) } }
+                        }
+                    }
                 }
             }
             .glass(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
+            if model.tvs.count > visibleRows {
+                Text("\(model.tvs.count) TVs found. Scroll for more.")
+                    .font(.caption2).foregroundStyle(.tertiary).padding(.leading, 4)
+            }
         }
+    }
+
+    /// Switched-on TVs first, then the rest alphabetically.
+    private var orderedTVs: [DaemonClient.Device] {
+        model.tvs.sorted { a, b in
+            let sa = model.selected.contains(a.ip), sb = model.selected.contains(b.ip)
+            if sa != sb { return sa }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
+    }
+
+    /// Rows that fit: about 45% of the screen, between 4 and 7 rows.
+    private var visibleRows: Int {
+        let screen = NSScreen.main?.visibleFrame.height ?? 800
+        return max(4, min(7, Int(screen * 0.45 / Tokens.rowHeight)))
+    }
+
+    private var listHeight: CGFloat {
+        let rows = CGFloat(min(model.tvs.count, visibleRows))
+        let statusLines = CGFloat(model.selected.count) * 14
+        let pin: CGFloat = model.pinFor == nil ? 0 : Tokens.pinHeight
+        let natural = CGFloat(model.tvs.count) * Tokens.rowHeight + statusLines + pin
+        return min(natural, rows * Tokens.rowHeight + pin)
     }
 
     // MARK: notices

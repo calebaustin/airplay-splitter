@@ -61,8 +61,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 
-# 3. Sign: tools first, then the app.
+# Copy GStreamer inside the app so it needs nothing from Homebrew at runtime.
+python3 "$ROOT/scripts/bundle_gstreamer.py" "$APP"
+
+# 3. Sign: every library and tool first, then the app.
 xattr -cr "$APP"
+find "$APP/Contents/Resources/gst" -type f \( -name '*.dylib' -o -perm +111 \) -print0 |
+  while IFS= read -r -d '' f; do codesign "${SIGN_OPTS[@]}" "$f"; done
 for f in "$APP/Contents/Resources/bin/"*; do codesign "${SIGN_OPTS[@]}" "$f"; done
 codesign "${SIGN_OPTS[@]}" "$APP"
 codesign --verify --deep --strict "$APP"

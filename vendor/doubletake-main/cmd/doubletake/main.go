@@ -134,7 +134,8 @@ func main() {
 	x11WindowID := flag.String("x11-window-id", "", "X11 window id to capture, decimal or 0xhex")
 	x11WindowName := flag.String("x11-window-name", "", "X11 window name to capture; prefer -x11-window-id")
 	noCursor := flag.Bool("no-cursor", false, "Don't show the mouse cursor in the captured video")
-	relayPort := flag.Int("relay-port", 0, "AirPlay Splitter: relay H.264 RTP from UxPlay -vrtp on this localhost UDP port instead of capturing the screen (implies -no-audio)")
+	relayPort := flag.Int("relay-port", 0, "AirPlay Splitter: relay H.264 RTP from UxPlay -vrtp on this localhost UDP port instead of capturing the screen")
+	relayAudioPort := flag.Int("relay-audio-port", 0, "AirPlay Splitter: relay L16 RTP audio (44.1 kHz stereo) from this localhost UDP port; without it, -relay-port implies -no-audio")
 	flag.Parse()
 	if *showVersion {
 		fmt.Printf("doubletake %s\n", version.String())
@@ -143,8 +144,14 @@ func main() {
 	if *relayPort > 0 {
 		airplay.RelayRTPPort = *relayPort
 		*testMode = true // reuse the capture-free source path
-		*noAudio = true
-		log.Printf("relaying video from UxPlay on 127.0.0.1:%d", *relayPort)
+		airplay.VideoOnlyAudioFallback = true
+		if *relayAudioPort > 0 {
+			airplay.RelayAudioPort = *relayAudioPort
+			log.Printf("relaying video from 127.0.0.1:%d and audio from 127.0.0.1:%d", *relayPort, *relayAudioPort)
+		} else {
+			*noAudio = true
+			log.Printf("relaying video from 127.0.0.1:%d (no audio)", *relayPort)
+		}
 	}
 	if !airplay.HasInProcessGStreamer() {
 		log.Println("warning: build without in-process GStreamer uses gst-launch-1.0 for video; adaptive stream quality is unavailable")

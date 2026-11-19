@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0 · November 19, 2026
+
+### Added
+- **Nothing else to install.** GStreamer now ships inside the app, so Homebrew isn't needed.
+- **Sound.** A switch sends the Mac's audio to the TVs. Off by default. iPhone and iPad sound comes through too.
+- **Share one window** with Apple's window picker, or **select an area** of a screen by dragging.
+- **Live preview** of what the TVs are showing.
+- New app and menu-bar icon.
+
+### Changed
+- The TV list scrolls once there are more than will fit, so the menu always hangs from the menu bar.
+  Switched-on TVs stay at the top.
+- TVs that only accept AAC-ELD audio now connect with video only instead of failing.
+
 ## 0.1.0 · November 18, 2026
 
 ### Added

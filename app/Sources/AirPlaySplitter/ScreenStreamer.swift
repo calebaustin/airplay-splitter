@@ -4,6 +4,7 @@ import VideoToolbox
 import CoreMedia
 import AppKit
 import CoreText
+import CoreImage
 
 /// Captures one display with ScreenCaptureKit, hardware-encodes it to H.264
 /// and sends it as RTP to localhost for doubletake to fan out.
@@ -24,33 +25,60 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
     private var repeatTimer: DispatchSourceTimer?
     private var frameIndex: Int64 = 0
 
-    init(rtpPort: UInt16) {
+    /// The Mac's sound, when capture includes audio.
+    let audio: AudioPump
+    /// A small image of what's being sent, about three times a second while
+    /// `previewEnabled` is on (the menu is open).
+    var onPreview: ((CGImage) -> Void)?
+    var previewEnabled = false
+    private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+    private var config: SCStreamConfiguration?
+
+    init(rtpPort: UInt16, audioPort: UInt16) {
         rtp = RTPSender(port: rtpPort)
+        audio = AudioPump(port: audioPort)
     }
 
     static func displays() async throws -> [SCDisplay] {
         try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true).displays
     }
 
-    func start(display: SCDisplay) async throws {
+    func start(display: SCDisplay, sourceRect: CGRect? = nil, captureAudio: Bool) async throws {
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let size = sourceRect?.size ?? CGSize(width: display.width, height: display.height)
+        try await start(filter: filter, contentSize: size, sourceRect: sourceRect, captureAudio: captureAudio)
+    }
+
+    /// Starts capture for any filter: a display, part of one, or a window
+    /// chosen with the system sharing picker.
+    func start(filter: SCContentFilter, contentSize: CGSize, sourceRect: CGRect? = nil,
+               captureAudio: Bool) async throws {
         stop()
-        let (w, h) = fit(display.width, display.height)
+        let scale = CGFloat(filter.pointPixelScale)
+        let (w, h) = fit(Int(contentSize.width * max(1, scale)), Int(contentSize.height * max(1, scale)))
         try makeEncoder(width: w, height: h)
 
-        let filter = SCContentFilter(display: display, excludingWindows: [])
         let cfg = SCStreamConfiguration()
         cfg.width = w
         cfg.height = h
+        if let sourceRect { cfg.sourceRect = sourceRect }
         cfg.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         cfg.minimumFrameInterval = CMTime(value: 1, timescale: fps)
         cfg.showsCursor = true
         cfg.queueDepth = 4
-        cfg.capturesAudio = false
+        cfg.capturesAudio = true                  // always on; the pump mutes
+        cfg.excludesCurrentProcessAudio = true
+        cfg.sampleRate = AudioPump.sampleRate
+        cfg.channelCount = 2
+        config = cfg
+        audio.muted = !captureAudio
 
         let s = SCStream(filter: filter, configuration: cfg, delegate: nil)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
+        try s.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue)
         try await s.startCapture()
         stream = s
+        audio.start()
 
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now() + .milliseconds(100), repeating: .milliseconds(Int(1000 / fps)))
@@ -65,6 +93,8 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
         stop()
         let (w, h) = (1920, 1080)
         try makeEncoder(width: w, height: h)
+        audio.muted = true      // keep a silent audio track running
+        audio.start()
         let started = Date()
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: .milliseconds(Int(1000 / fps)))
@@ -110,6 +140,7 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
     }
 
     func stop() {
+        audio.stop()
         repeatTimer?.cancel(); repeatTimer = nil
         if let s = stream { Task { try? await s.stopCapture() } }
         stream = nil
@@ -122,7 +153,14 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
 
     // MARK: capture
 
+    /// Turns sending the Mac's sound on or off without restarting capture.
+    func setAudio(_ on: Bool) { audio.muted = !on }
+
     func stream(_ stream: SCStream, didOutputSampleBuffer sb: CMSampleBuffer, of type: SCStreamOutputType) {
+        if type == .audio {
+            if sb.isValid { audio.append(sb) }
+            return
+        }
         guard type == .screen, sb.isValid,
               let attachments = CMSampleBufferGetSampleAttachmentsArray(sb, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
               let raw = attachments.first?[.status] as? Int,
@@ -144,12 +182,21 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
         lastFrameTime = CFAbsoluteTimeGetCurrent()
         let pts = CMTime(value: frameIndex, timescale: fps)
         frameIndex += 1
+        if previewEnabled, frameIndex % 10 == 0, let onPreview { makePreview(pb).map(onPreview) }
         VTCompressionSessionEncodeFrame(session, imageBuffer: pb, presentationTimeStamp: pts,
                                         duration: CMTime(value: 1, timescale: fps),
                                         frameProperties: nil, infoFlagsOut: nil) { [weak self] status, _, sample in
             guard status == noErr, let sample, let self else { return }
             self.packetize(sample)
         }
+    }
+
+    /// A 320-pixel-wide copy of the frame for the menu's preview.
+    private func makePreview(_ pb: CVPixelBuffer) -> CGImage? {
+        let image = CIImage(cvPixelBuffer: pb)
+        let scale = 320 / image.extent.width
+        let small = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        return ciContext.createCGImage(small, from: small.extent)
     }
 
     private func makeEncoder(width: Int, height: Int) throws {
