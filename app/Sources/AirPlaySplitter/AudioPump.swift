@@ -111,10 +111,40 @@ final class AudioPump {
                 d[i * 2 + 1] = UInt16(bitPattern: pcm(1, i)).bigEndian
             }
         }
+        enqueue(out)
+    }
+
+    private func enqueue(_ out: Data) {
         queue.async {
             self.buffer.append(out)
             let limit = Self.maxBuffered * Self.bytesPerFrame
             if self.buffer.count > limit { self.buffer.removeFirst(self.buffer.count - limit) }
         }
+    }
+
+    /// Accepts float PCM at any sample rate (for example a video's 48 kHz
+    /// track) and resamples it to 44.1 kHz. `channels` holds one pointer per
+    /// channel; mono is sent to both sides.
+    func appendFloat(channels: [UnsafePointer<Float>], frames: Int, sampleRate: Double) {
+        guard !muted, frames > 0, !channels.isEmpty, sampleRate > 0 else { return }
+        let ratio = sampleRate / Double(Self.sampleRate)
+        let outFrames = Int(Double(frames) / ratio)
+        guard outFrames > 0 else { return }
+        let left = channels[0], right = channels.count > 1 ? channels[1] : channels[0]
+        var out = Data(count: outFrames * Self.bytesPerFrame)
+        out.withUnsafeMutableBytes { dst in
+            let d = dst.bindMemory(to: UInt16.self)
+            for i in 0..<outFrames {
+                // Linear interpolation between neighbouring input samples.
+                let pos = Double(i) * ratio
+                let j = min(Int(pos), frames - 1), k = min(j + 1, frames - 1)
+                let f = Float(pos - Double(j))
+                let l = left[j] + (left[k] - left[j]) * f
+                let r = right[j] + (right[k] - right[j]) * f
+                d[i * 2] = UInt16(bitPattern: Int16(max(-1, min(1, l)) * 32767)).bigEndian
+                d[i * 2 + 1] = UInt16(bitPattern: Int16(max(-1, min(1, r)) * 32767)).bigEndian
+            }
+        }
+        enqueue(out)
     }
 }

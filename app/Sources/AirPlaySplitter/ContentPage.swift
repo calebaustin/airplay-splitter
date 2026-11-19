@@ -7,11 +7,25 @@ struct ContentPage: View {
     @ObservedObject var model: SplitterModel
 
     var body: some View {
-        VStack(spacing: Tokens.gap) {
+        // Capped like the TV list, so the menu always fits under the menu bar.
+        ScrollView(.vertical) {
+            cards
+        }
+        .scrollIndicators(.automatic)
+        .frame(height: max(300, (NSScreen.main?.visibleFrame.height ?? 800) * 0.45))
+        // Glass draws in its own layer; keep it inside the scroll area.
+        .clipShape(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
+    }
+
+    @ViewBuilder private var cards: some View {
+        let stack = VStack(spacing: Tokens.gap) {
             ImageCard(model: model)
+            VideoCard(model: model, video: model.video)
+            WebCard(model: model, web: model.web)
             HoldingCard(model: model)
             CountdownCard(model: model)
         }
+        if #available(macOS 26.0, *) { GlassEffectContainer(spacing: Tokens.gap) { stack } } else { stack }
     }
 }
 
@@ -98,6 +112,87 @@ private struct ImageCard: View {
     }
 }
 
+// MARK: video
+
+private struct VideoCard: View {
+    @ObservedObject var model: SplitterModel
+    @ObservedObject var video: VideoSource
+    @State private var targeted = false
+
+    var body: some View {
+        Card(title: "Video", symbol: "film", live: model.source == .video) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: Tokens.rowRadius, style: .continuous)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                        .foregroundStyle(targeted ? Color.accentColor : .secondary.opacity(0.5))
+                    Image(systemName: model.videoPath == nil ? "arrow.down.doc" : "film").foregroundStyle(.secondary)
+                }
+                .frame(width: 80, height: 45)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(model.videoPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Drop a video here")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    HStack(spacing: 6) {
+                        Button("Choose…") { if let url = openPanel(types: [.movie, .video, .mpeg4Movie, .quickTimeMovie]) { model.showVideo(at: url) } }
+                        if model.source == .video {
+                            Button { video.isPlaying ? video.pause() : video.play() } label: {
+                                Image(systemName: video.isPlaying ? "pause.fill" : "play.fill")
+                            }.help(video.isPlaying ? "Pause" : "Play")
+                            Button { video.restart() } label: { Image(systemName: "backward.end.fill") }.help("Start over")
+                            Toggle(isOn: $video.loop) { Image(systemName: "repeat") }
+                                .toggleStyle(.button).help("Loop")
+                        } else {
+                            Button("Show") { model.showVideo() }
+                                .buttonStyle(.borderedProminent).disabled(model.videoPath == nil)
+                        }
+                    }
+                    .controlSize(.small)
+                }
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $targeted) { providers in
+            _ = providers.first?.loadObject(ofClass: URL.self) { url, _ in
+                if let url { Task { @MainActor in model.showVideo(at: url) } }
+            }
+            return true
+        }
+    }
+}
+
+// MARK: web page
+
+private struct WebCard: View {
+    @ObservedObject var model: SplitterModel
+    @ObservedObject var web: WebSource
+
+    var body: some View {
+        Card(title: "Web Page", symbol: "globe", live: model.source == .web) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    TextField("example.org/announcements", text: $model.webURL)
+                        .onSubmit { model.showWeb() }
+                        .modifier(Field())
+                    if model.source == .web {
+                        Button { web.reload() } label: { Image(systemName: "arrow.clockwise") }.help("Reload")
+                    }
+                    Button("Show") { model.showWeb() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.webURL.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .controlSize(.small)
+                if model.source == .web {
+                    if web.loading {
+                        Text("Loading…").font(.caption2).foregroundStyle(.secondary)
+                    } else if let f = web.failed {
+                        Text("Couldn't load the page: \(f)").font(.caption2).foregroundStyle(Tokens.warn).lineLimit(2)
+                    }
+                }
+            }
+            .font(.callout)
+        }
+    }
+}
+
 // MARK: holding screen
 
 private struct HoldingCard: View {
@@ -109,8 +204,8 @@ private struct HoldingCard: View {
     var body: some View {
         Card(title: "Holding Screen", symbol: "rectangle.inset.filled", live: model.source == .holding) {
             VStack(alignment: .leading, spacing: 6) {
-                TextField("Title", text: $title).onSubmit(commit)
-                TextField("Subtitle", text: $subtitle).onSubmit(commit)
+                TextField("Title", text: $title).onSubmit(commit).modifier(Field())
+                TextField("Subtitle", text: $subtitle).onSubmit(commit).modifier(Field())
                 HStack(spacing: 8) {
                     ColorPicker("Background", selection: $color, supportsOpacity: false)
                         .labelsHidden()
@@ -129,7 +224,6 @@ private struct HoldingCard: View {
                 }
                 .controlSize(.small)
             }
-            .textFieldStyle(.roundedBorder)
             .font(.callout)
         }
         .onAppear {
@@ -152,7 +246,8 @@ private struct HoldingCard: View {
 
 private struct CountdownCard: View {
     @ObservedObject var model: SplitterModel
-    @State private var custom = 20
+    /// The end time for "Until": defaults to the next quarter hour.
+    @State private var until = CountdownCard.nextQuarterHour()
 
     var body: some View {
         Card(title: "Countdown", symbol: "timer", live: model.source == .countdown) {
@@ -161,23 +256,25 @@ private struct CountdownCard: View {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         Text(remaining(until: end)).font(.title3.monospacedDigit().weight(.semibold))
                     }
-                    Text("on the holding screen").font(.caption).foregroundStyle(.secondary)
+                    Text("until \(end.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     Button("Stop") { model.stopCountdown() }.controlSize(.small)
                 }
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
-                        ForEach([5, 10, 15, 30], id: \.self) { m in
+                        ForEach([5, 10, 15], id: \.self) { m in
                             Button("\(m) min") { model.startCountdown(minutes: m) }
                         }
                     }
                     HStack(spacing: 6) {
-                        Stepper(value: $custom, in: 1...180) {
-                            Text("\(custom) min").monospacedDigit()
-                        }
+                        Text("Until").foregroundStyle(.secondary)
+                        DatePicker("Until", selection: $until, displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                            .datePickerStyle(.stepperField)
                         Spacer()
-                        Button("Start") { model.startCountdown(minutes: custom) }.buttonStyle(.borderedProminent)
+                        Button("Start") { model.startCountdown(until: until) }.buttonStyle(.borderedProminent)
                     }
                     Text("Uses the holding screen's background, logo and title.")
                         .font(.caption2).foregroundStyle(.tertiary)
@@ -185,20 +282,48 @@ private struct CountdownCard: View {
                 .controlSize(.small)
             }
         }
+        .onAppear { if until < Date() { until = Self.nextQuarterHour() } }
     }
 
     private func remaining(until end: Date) -> String {
         let s = max(0, Int(end.timeIntervalSinceNow.rounded(.up)))
-        return s == 0 ? "Starting now" : String(format: "%d:%02d", s / 60, s % 60)
+        if s == 0 { return "Starting now" }
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
+                         : String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    static func nextQuarterHour() -> Date {
+        // The next :00, :15, :30 or :45 at least a minute away.
+        let cal = Calendar.current
+        var c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: Date().addingTimeInterval(60))
+        let m = c.minute ?? 0
+        c.minute = m + (15 - m % 15) % 15
+        c.second = 0
+        return cal.date(from: c) ?? Date()
     }
 }
 
 // MARK: helpers
 
+/// A plain text field on a soft tint. The system's bordered style draws its
+/// gray bezel first and restyles it a moment later, which flashed in the menu.
+struct Field: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+    }
+}
+
 @MainActor
-private func openPanel(images: Bool) -> URL? {
+private func openPanel(images: Bool) -> URL? { openPanel(types: images ? [.image] : [.item]) }
+
+@MainActor
+private func openPanel(types: [UTType]) -> URL? {
     let p = NSOpenPanel()
-    p.allowedContentTypes = images ? [.image] : [.item]
+    p.allowedContentTypes = types
     p.allowsMultipleSelection = false
     p.canChooseDirectories = false
     NSApp.activate(ignoringOtherApps: true)

@@ -31,17 +31,12 @@ right (with arrows) between pages:
 - Paged layout (TVs and Content), quick image, holding screen and countdown. The menu stays anchored to the
   menu bar.
 
-## Next: content sources (what sets this apart)
+## Done in 0.5.0
 
-These all plug into the same path the test pattern uses. The app draws frames and every selected TV gets
-them, so every screen stays in sync by design.
+- Video playback with sound, web pages (including local files), countdown to an end time, and trackpad
+  swiping between pages.
 
-| Feature | Notes |
-|---|---|
-| **Quick video** | Drop a video file and play it on the selected TVs with play, pause and loop. No presentation app needed. |
-| **Web page** | Enter a URL and show it full-screen. Dashboards, web slides, signage. |
-
-## Later: bigger pieces
+## Next: bigger pieces
 
 | Feature | Notes and trade-offs |
 |---|---|

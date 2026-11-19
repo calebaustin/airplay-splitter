@@ -100,10 +100,12 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
     /// countdown) at 1080p. `frame` gets seconds since start and may return
     /// the same buffer each time for still content. Silent audio keeps the
     /// TVs' sound clock running.
-    func startGenerated(_ frame: @escaping (Double) -> CVPixelBuffer?) throws {
+    /// - sound: whether audio pushed to `audio` (a video's soundtrack) goes
+    ///   to the TVs; otherwise a silent track runs.
+    func startGenerated(sound: Bool = false, _ frame: @escaping (Double) -> CVPixelBuffer?) throws {
         stop()
         try makeEncoder(width: 1920, height: 1080)
-        audio.muted = true
+        setAudio(sound)
         audio.start()
         let started = Date()
         let t = DispatchSource.makeTimerSource(queue: queue)

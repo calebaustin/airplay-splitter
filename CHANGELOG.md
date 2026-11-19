@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 · November 19, 2026
+
+### Added
+- **Video.** Drop a video onto the Content page (or choose one) and it plays on every TV, with play, pause,
+  start over and loop. It also plays on the Mac as usual, and with Sound on its soundtrack goes to the TVs.
+- **Web page.** Type an address and it shows full-screen on the TVs: dashboards, web slides, signage. A local
+  page works too (for example `~/Signage/index.html`).
+- **Countdown to a time.** Pick an end time ("Until 10:30 AM") instead of a length. The 5, 10 and 15 minute
+  buttons stay.
+- **Trackpad swipe.** Swipe left or right with two fingers to switch between TVs and Content. The arrows are
+  still there if you want them.
+
+### Fixed
+- Text boxes on the Content page no longer flash gray when the page opens.
+- The Content page scrolls within the menu instead of making it taller than the screen.
+
 ## 0.4.0 · November 19, 2026
 
 ### Added

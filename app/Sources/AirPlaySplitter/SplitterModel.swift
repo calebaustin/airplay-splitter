@@ -14,7 +14,16 @@ final class SplitterModel: ObservableObject {
         case image                       // a still image (`imagePath`)
         case holding                     // the holding screen (`holding`)
         case countdown                   // a countdown to `countdownEnd`
+        case video                       // a video file (`videoPath`)
+        case web                         // a web page (`webURL`)
     }
+
+    /// Video playback for `.video`, and the file, remembered between launches.
+    let video = VideoSource()
+    @Published private(set) var videoPath: String? = UserDefaults.standard.string(forKey: "videoPath")
+    /// The hidden browser for `.web`, and its address.
+    let web = WebSource()
+    @Published var webURL: String = UserDefaults.standard.string(forKey: "webURL") ?? ""
 
     // MARK: content (drawn by the app, so no Screen Recording needed)
 
@@ -29,7 +38,7 @@ final class SplitterModel: ObservableObject {
     }
     /// When the countdown reaches zero.
     @Published private(set) var countdownEnd: Date?
-    var isContent: Bool { [.image, .holding, .countdown].contains(source) }
+    var isContent: Bool { [.image, .holding, .countdown, .video, .web].contains(source) }
 
     /// Whether the Mac's sound goes to the TVs. Off by default, so a room's
     /// own speakers don't double up; remembered between launches.
@@ -81,11 +90,13 @@ final class SplitterModel: ObservableObject {
         case .image: imagePath.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Image"
         case .holding: "Holding screen"
         case .countdown: "Countdown"
+        case .video: videoPath.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Video"
+        case .web: URL(string: webURL)?.host ?? "Web page"
         }
     }
 
     /// Sound can come from the Mac (screen, region, window) or the phone.
-    var audioAvailable: Bool { source != .testPattern && !isContent }
+    var audioAvailable: Bool { source == .video || (source != .testPattern && !isContent) }
 
     var liveCount: Int { streams.values.filter { $0.state == "streaming" && selected.contains($0.device_ip) }.count }
 
@@ -106,6 +117,8 @@ final class SplitterModel: ObservableObject {
         case .image: "photo"
         case .holding: "rectangle.inset.filled"
         case .countdown: "timer"
+        case .video: "film"
+        case .web: "globe"
         }
     }
 
@@ -168,6 +181,12 @@ final class SplitterModel: ObservableObject {
         if preview { return }
         streamer.onPreview = { [weak self] img in
             DispatchQueue.main.async { self?.preview = img }
+        }
+        // A playing video's soundtrack goes to the TVs when Sound is on
+        // (the pump drops it while muted).
+        let pump = streamer.audio
+        video.onAudio = { channels, frames, rate in
+            pump.appendFloat(channels: channels, frames: frames, sampleRate: rate)
         }
         updater.$available.assign(to: &$update)
         updater.start()
@@ -290,7 +309,7 @@ final class SplitterModel: ObservableObject {
         case .phones: "phones"
         case .holding: "holding"
         case .image: imagePath == nil ? nil : "image"
-        case .region, .window, .countdown: nil   // chosen or started fresh each time
+        case .region, .window, .countdown, .video, .web: nil   // chosen or started fresh each time
         }
         if let value { UserDefaults.standard.set(value, forKey: "source") }
     }
@@ -466,6 +485,57 @@ final class SplitterModel: ObservableObject {
         if source == .countdown { restartCapture() } else { source = .countdown }
     }
 
+    /// Counts down to a time of day: today, or tomorrow if it has passed.
+    func startCountdown(until time: Date) {
+        let cal = Calendar.current
+        let hm = cal.dateComponents([.hour, .minute], from: time)
+        var end = cal.date(bySettingHour: hm.hour ?? 0, minute: hm.minute ?? 0, second: 0, of: Date()) ?? time
+        if end <= Date() { end = cal.date(byAdding: .day, value: 1, to: end) ?? end }
+        countdownEnd = end
+        if source == .countdown { restartCapture() } else { source = .countdown }
+    }
+
+    // MARK: video and web
+
+    /// Loads a video and shows it on the TVs, playing.
+    func showVideo(at url: URL) {
+        Task {
+            do {
+                try await video.load(url)
+                videoPath = url.path
+                UserDefaults.standard.set(url.path, forKey: "videoPath")
+                if source == .video { restartCapture() } else { source = .video }
+                video.play()
+            } catch {
+                message = "That video couldn't be opened: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func showVideo() {
+        guard let p = videoPath else { return }
+        if source == .video, video.player.currentItem != nil { video.play() } else { showVideo(at: URL(fileURLWithPath: p)) }
+    }
+
+    /// Opens a web page on the TVs. Adds https:// if no scheme was typed.
+    func showWeb() {
+        var text = webURL.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        // A local page (offline signage): a path like ~/Signage/index.html.
+        if text.hasPrefix("/") || text.hasPrefix("~") {
+            text = URL(fileURLWithPath: (text as NSString).expandingTildeInPath).absoluteString
+        } else if !text.contains("://") {
+            text = "https://" + text
+        }
+        guard let url = URL(string: text), ["https", "http", "file"].contains(url.scheme ?? "") else {
+            message = "That doesn't look like a web address."; return
+        }
+        webURL = text
+        UserDefaults.standard.set(text, forKey: "webURL")
+        web.load(url)
+        if source == .web { restartCapture() } else { source = .web }
+    }
+
     func stopCountdown() {
         countdownEnd = nil
         if source == .countdown { source = .holding }
@@ -484,6 +554,9 @@ final class SplitterModel: ObservableObject {
         case .holding:
             guard let pb = ContentRenderer.holding(design, logo: logo) else { return nil }
             return { _ in pb }
+        case .web:
+            let w = web
+            return { _ in w.frame() }
         case .countdown:
             let end = countdownEnd ?? Date()
             var lastSecond = -1
@@ -545,6 +618,8 @@ final class SplitterModel: ObservableObject {
         if case .phones = old, source != .phones { uxplay?.terminate(); uxplay = nil }
         if source == .phones, !selected.isEmpty, uxplay == nil { startUxPlay() }
         if source == .phones { blanked = false }   // phone video bypasses the app
+        if old == .video, source != .video { video.pause() }
+        if old == .web, source != .web { web.stop() }
         preview = nil
         saveSource()
         updateOutline()
@@ -568,9 +643,13 @@ final class SplitterModel: ObservableObject {
         case .testPattern:
             do { try streamer.startTestPattern(); capturing = true }
             catch { message = error.localizedDescription }
-        case .image, .holding, .countdown:
+        case .image, .holding, .countdown, .web:
             guard let frames = contentFrames() else { return }
             do { try streamer.startGenerated(frames); capturing = true }
+            catch { message = error.localizedDescription }
+        case .video:
+            let v = video
+            do { try streamer.startGenerated(sound: sendAudio) { _ in v.frame() }; capturing = true }
             catch { message = error.localizedDescription }
         case .phones:
             // UxPlay sends the phone's video (and sound, when on). Without

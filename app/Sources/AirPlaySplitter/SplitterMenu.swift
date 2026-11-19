@@ -54,18 +54,17 @@ struct SplitterMenu: View {
             if model.gstreamerMissing { gstreamerNotice }
             sourceSection
             if model.needsScreenAccess { accessNotice }
-            pageBar
-            Group {
-                if page == 0 {
-                    receiversSection.transition(.asymmetric(insertion: .move(edge: .leading), removal: .opacity))
-                } else {
-                    ContentPage(model: model).transition(.asymmetric(insertion: .move(edge: .trailing), removal: .opacity))
+            // TVs / Content: swipe sideways with two fingers anywhere here;
+            // the arrows and page names are there too, but optional.
+            VStack(alignment: .leading, spacing: Tokens.gap) {
+                pageBar
+                Group {
+                    if page == 0 { receiversSection } else { ContentPage(model: model) }
                 }
+                .transition(.opacity)
+                .id(page)
             }
-            .gesture(DragGesture(minimumDistance: 30).onEnded { v in
-                if v.translation.width < -40 { turn(to: page + 1) }
-                if v.translation.width > 40 { turn(to: page - 1) }
-            })
+            .background(HorizontalSwipe { turn(to: page + $0) })
             if let msg = model.message { messageRow(msg) }
             footer
         }
@@ -198,13 +197,17 @@ struct SplitterMenu: View {
     // MARK: pages
 
     private func turn(to p: Int) {
-        withAnimation(.snappy(duration: 0.22)) { page = min(max(p, 0), pages.count - 1) }
+        let next = min(max(p, 0), pages.count - 1)
+        guard next != page else { return }
+        withAnimation(.easeInOut(duration: 0.18)) { page = next }
     }
 
     private var pageBar: some View {
         HStack(spacing: 6) {
-            Button { turn(to: page - 1) } label: { Image(systemName: "chevron.left") }
-                .disabled(page == 0)
+            Button { turn(to: page - 1) } label: { Image(systemName: "chevron.left").font(.caption) }
+                .foregroundStyle(.tertiary)
+                .opacity(page == 0 ? 0 : 1)
+                .help("Or swipe with two fingers")
             Spacer()
             ForEach(pages.indices, id: \.self) { i in
                 Button { turn(to: i) } label: {
@@ -216,8 +219,10 @@ struct SplitterMenu: View {
                 }
             }
             Spacer()
-            Button { turn(to: page + 1) } label: { Image(systemName: "chevron.right") }
-                .disabled(page == pages.count - 1)
+            Button { turn(to: page + 1) } label: { Image(systemName: "chevron.right").font(.caption) }
+                .foregroundStyle(.tertiary)
+                .opacity(page == pages.count - 1 ? 0 : 1)
+                .help("Or swipe with two fingers")
         }
         .buttonStyle(.borderless)
         .controlSize(.small)
@@ -440,7 +445,7 @@ struct ReceiverRow: View {
             Text("Enter the PIN shown on this TV.").font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 TextField("PIN", text: $pin)
-                    .textFieldStyle(.roundedBorder)
+                    .modifier(Field())
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 96)
                     .focused($pinFocused)

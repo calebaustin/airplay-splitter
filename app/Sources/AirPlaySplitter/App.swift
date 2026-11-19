@@ -55,6 +55,38 @@ struct AirPlaySplitterApp: App {
             RunLoop.main.run(until: Date().addingTimeInterval(20))
             exit(1)
         }
+        // Developer check: `--selftest-content video <file> <out.png>` or
+        // `--selftest-content web <url> <out.png>` streams that content (with a
+        // video's sound) to the relay ports for 8 s and saves the last frame.
+        if let i = CommandLine.arguments.firstIndex(of: "--selftest-content"), i + 3 < CommandLine.arguments.count {
+            let kind = CommandLine.arguments[i + 1], target = CommandLine.arguments[i + 2]
+            let out = URL(fileURLWithPath: CommandLine.arguments[i + 3])
+            MainActor.assumeIsolated {
+                NSApplication.shared.setActivationPolicy(.accessory)
+                NSApplication.shared.finishLaunching()
+                let s = ScreenStreamer(rtpPort: SplitterModel.rtpPort, audioPort: SplitterModel.audioPort)
+                let video = VideoSource(), web = WebSource()
+                var frame: () -> CVPixelBuffer? = { nil }
+                if kind == "video" {
+                    let pump = s.audio
+                    video.onAudio = { c, n, r in pump.appendFloat(channels: c, frames: n, sampleRate: r) }
+                    Task { @MainActor in try? await video.load(URL(fileURLWithPath: target)); video.play() }
+                    frame = { video.frame() }
+                    try? s.startGenerated(sound: true) { _ in video.frame() }
+                } else {
+                    web.load(URL(string: target)!)
+                    frame = { web.frame() }
+                    try? s.startGenerated { _ in web.frame() }
+                }
+                RunLoop.main.run(until: Date().addingTimeInterval(8))
+                if kind == "web" { print("web loading=\(web.loading) failed=\(web.failed ?? "none")") }
+                if let pb = frame(), let cg = CIContext().createCGImage(CIImage(cvPixelBuffer: pb), from: CGRect(x: 0, y: 0, width: 1920, height: 1080)) {
+                    try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: out)
+                }
+                s.stop()
+            }
+            exit(0)
+        }
         // Developer check: `--render-content dir` writes holding and countdown frames.
         if let i = CommandLine.arguments.firstIndex(of: "--render-content"), i + 1 < CommandLine.arguments.count {
             let dir = URL(fileURLWithPath: CommandLine.arguments[i + 1])

@@ -35,8 +35,8 @@ something onto every screen.
   out**, an **iPhone or iPad**, or a **test pattern**.
 - **Sound on or off.** One switch sends the Mac's audio to the TVs too. It's off by default so a room's own
   speakers don't double up.
-- **Put content up without your screen.** The **Content** page shows an image you drop in, a holding
-  screen with your logo, or a countdown, identical on every TV.
+- **Put content up without your screen.** The **Content** page shows an image or video you drop in, a web
+  page, a holding screen with your logo, or a countdown to a set time, identical on every TV.
 - **See what's live.** A small preview shows exactly what the TVs are showing.
 - **Made for live moments.** **Blank** sends black to every TV without disconnecting. A dropped TV
   reconnects by itself. The Mac stays awake while sending. A dashed outline marks a shared area.
