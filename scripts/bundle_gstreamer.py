@@ -9,7 +9,7 @@ Layout inside Contents/Resources/gst:
     libexec/gst-plugin-scanner
     lib/*.dylib                                (GStreamer, GLib, FFmpeg, ...)
     lib/gstreamer-1.0/*.dylib                  (plugins)
-Contents/Resources/bin/uxplay is relinked against lib/ as well.
+Contents/Helpers/receiver/AirPlay Splitter (UxPlay) is relinked against lib/ as well.
 
 Every Homebrew reference is rewritten to @rpath/<name>. Signatures are
 invalidated by install_name_tool, so the caller must re-sign afterwards.
@@ -100,8 +100,8 @@ def main():
         if not os.path.exists(src):
             sys.exit(f"missing plugin {p}: {src}")
         work.append((os.path.realpath(src), os.path.join(plugdir, os.path.basename(src)), "@loader_path/.."))
-    uxplay = os.path.join(res, "bin", "uxplay")
-    fix_only = [(uxplay, "@executable_path/../gst/lib")] if os.path.exists(uxplay) else []
+    uxplay = os.path.join(app, "Contents", "Helpers", "receiver", "AirPlay Splitter")
+    fix_only = [(uxplay, "@executable_path/../../Resources/gst/lib")] if os.path.exists(uxplay) else []
 
     copied = {}  # library basename -> source path
 

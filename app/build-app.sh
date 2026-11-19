@@ -34,9 +34,13 @@ SIGN_OPTS=(--force --timestamp=none -s "$IDENTITY")
 # 2. Assemble the bundle.
 STAGE=$(mktemp -d)
 APP="$STAGE/AirPlay Splitter.app"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
+# Helpers carry the app's name so macOS permission prompts say "AirPlay Splitter".
+ENGINE="$APP/Contents/Helpers/engine/AirPlay Splitter"      # doubletake
+RECEIVER="$APP/Contents/Helpers/receiver/AirPlay Splitter"  # UxPlay
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "${ENGINE:h}" "${RECEIVER:h}"
 cp "$HERE/.build/release/AirPlaySplitter" "$APP/Contents/MacOS/AirPlay Splitter"
-cp "$ROOT/vendor/doubletake-main/bin/doubletake" "$UXPLAY" "$APP/Contents/Resources/bin/"
+cp "$ROOT/vendor/doubletake-main/bin/doubletake" "$ENGINE"
+cp "$UXPLAY" "$RECEIVER"
 cp "$HERE/Icon/AppIcon.icns" "$HERE/Icon/MenuBarIcon.pdf" "$APP/Contents/Resources/"
 cp "$ROOT/LICENSE" "$APP/Contents/Resources/LICENSE.txt"
 
@@ -51,6 +55,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>SplitterUpdateRepo</key><string>${UPDATE_REPO:-calebaustin/airplay-splitter}</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
@@ -68,7 +73,8 @@ python3 "$ROOT/scripts/bundle_gstreamer.py" "$APP"
 xattr -cr "$APP"
 find "$APP/Contents/Resources/gst" -type f \( -name '*.dylib' -o -perm +111 \) -print0 |
   while IFS= read -r -d '' f; do codesign "${SIGN_OPTS[@]}" "$f"; done
-for f in "$APP/Contents/Resources/bin/"*; do codesign "${SIGN_OPTS[@]}" "$f"; done
+codesign "${SIGN_OPTS[@]}" -i local.airplaysplitter.engine "$ENGINE"
+codesign "${SIGN_OPTS[@]}" -i local.airplaysplitter.receiver "$RECEIVER"
 codesign "${SIGN_OPTS[@]}" "$APP"
 codesign --verify --deep --strict "$APP"
 

@@ -41,6 +41,7 @@ something onto every screen.
 - **One encoder for every TV.** The picture is encoded once with the Mac's hardware encoder and shared, so
   adding a fourth TV costs almost nothing.
 - **Nothing else to install.** Everything it needs is inside the app.
+- **Stays up to date.** It checks GitHub once a day and offers a one-click download when a new version is out.
 
 <p align="center">
   <img src="docs/test-pattern.png" width="560" alt="The test pattern: color bars with the words AirPlay Splitter test and a moving black bar.">

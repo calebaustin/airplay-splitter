@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 · November 19, 2026
+
+### Added
+- **Update check.** Once a day the app quietly checks GitHub. When a new version is out, the menu shows it with
+  a Download button for the new DMG and how to replace the app. A dot on the menu-bar icon says one is waiting.
+
+### Fixed
+- Permission prompts now say “AirPlay Splitter” instead of “doubletake” or “uxplay”.
+
 ## 0.2.0 · November 19, 2026
 
 ### Added

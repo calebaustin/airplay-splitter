@@ -42,6 +42,7 @@ struct SplitterMenu: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.gap) {
             header
+            if let u = model.update { updateCard(u) }
             if model.gstreamerMissing { gstreamerNotice }
             sourceSection
             if model.needsScreenAccess { accessNotice }
@@ -71,6 +72,32 @@ struct SplitterMenu: View {
             }
             Spacer()
         }
+    }
+
+    // MARK: update
+
+    private func updateCard(_ u: Updater.Update) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Version \(u.version) is available").font(.callout.weight(.semibold))
+                    Text("Open the download, drag AirPlay Splitter onto Applications and choose Replace. Then quit this copy and open the new one.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.accentColor)
+            }
+            HStack {
+                Button("What's New") { model.updater.openReleasePage() }.buttonStyle(.borderless)
+                Spacer()
+                Button("Later") { model.updater.skip() }
+                Button("Download") { model.updater.download() }.buttonStyle(.borderedProminent)
+            }
+            .controlSize(.small)
+        }
+        .padding(10)
+        .glass(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
     }
 
     // MARK: source

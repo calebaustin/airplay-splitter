@@ -1,6 +1,7 @@
 import Foundation
 import ScreenCaptureKit
 import AppKit
+import Combine
 
 @MainActor
 final class SplitterModel: ObservableObject {
@@ -97,6 +98,10 @@ final class SplitterModel: ObservableObject {
     @Published var pinFor: DaemonClient.Device?
     @Published var message: String?
 
+    /// A newer release on GitHub, if any (checked quietly once a day).
+    @Published var update: Updater.Update?
+    let updater = Updater()
+
     static let rtpPort: UInt16 = 5600
     static let audioPort: UInt16 = 5602
     static let receiverName = "AirPlay Splitter"
@@ -121,6 +126,8 @@ final class SplitterModel: ObservableObject {
         streamer.onPreview = { [weak self] img in
             DispatchQueue.main.async { self?.preview = img }
         }
+        updater.$available.assign(to: &$update)
+        updater.start()
         startDaemon()
         discovery.onChange = { [weak self] list in
             // NetService delivers on the main run loop.
@@ -381,13 +388,17 @@ final class SplitterModel: ObservableObject {
 
     // MARK: helpers
 
-    /// Bundled tools live in Contents/Resources/bin; fall back to SPLITTER_BIN.
+    /// Bundled helpers live in Contents/Helpers/<role>/AirPlay Splitter, named
+    /// after the app so macOS permission prompts say "AirPlay Splitter".
+    /// Development runs fall back to SPLITTER_BIN/<doubletake|uxplay>.
     private func tool(_ name: String) -> URL? {
-        var dirs: [URL] = []
-        if let r = Bundle.main.resourceURL { dirs.append(r.appendingPathComponent("bin")) }
-        if let env = ProcessInfo.processInfo.environment["SPLITTER_BIN"] { dirs.append(URL(fileURLWithPath: env)) }
-        return dirs.map { $0.appendingPathComponent(name) }
-            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        let role = name == "uxplay" ? "receiver" : "engine"
+        var candidates: [URL] = []
+        candidates.append(Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/\(role)/AirPlay Splitter"))
+        if let env = ProcessInfo.processInfo.environment["SPLITTER_BIN"] {
+            candidates.append(URL(fileURLWithPath: env).appendingPathComponent(name))
+        }
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
     /// Apps launched from Finder get a bare PATH; doubletake needs gst-launch-1.0.

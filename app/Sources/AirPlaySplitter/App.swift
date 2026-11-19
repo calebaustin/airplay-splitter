@@ -4,6 +4,7 @@ import SwiftUI
 /// Dimmed while nothing is being sent.
 struct MenuBarIcon: View {
     let active: Bool
+    var badge = false
     private static let image: NSImage? = {
         guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "pdf"),
               let img = NSImage(contentsOf: url) else { return nil }
@@ -15,7 +16,10 @@ struct MenuBarIcon: View {
 
     var body: some View {
         if let img = Self.image {
-            Image(nsImage: img).opacity(active ? 1 : 0.6)
+            Image(nsImage: img).opacity(active || badge ? 1 : 0.6)
+                .overlay(alignment: .topTrailing) {
+                    if badge { Circle().fill(Color.accentColor).frame(width: 5, height: 5).offset(x: 2, y: -1) }
+                }
         } else {
             Image(systemName: active ? "rectangle.on.rectangle.fill" : "rectangle.on.rectangle")
         }
@@ -35,6 +39,19 @@ struct AirPlaySplitterApp: App {
             RunLoop.main.run(until: Date().addingTimeInterval(8))
             s.stop()
             exit(0)
+        }
+        // Developer check: `--check-update` runs one update check and prints it.
+        if CommandLine.arguments.contains("--check-update") {
+            MainActor.assumeIsolated {
+                let u = Updater()
+                Task { @MainActor in
+                    await u.check()
+                    print(u.available.map { "update \($0.version) \($0.dmgURL)" } ?? "up to date")
+                    exit(0)
+                }
+            }
+            RunLoop.main.run(until: Date().addingTimeInterval(20))
+            exit(1)
         }
         // Developer check: `--render-menu out.png` draws the menu with sample data.
         if let i = CommandLine.arguments.firstIndex(of: "--render-menu"), i + 1 < CommandLine.arguments.count {
@@ -89,7 +106,7 @@ struct AirPlaySplitterApp: App {
         MenuBarExtra {
             SplitterMenu(model: model)
         } label: {
-            MenuBarIcon(active: !model.selected.isEmpty)
+            MenuBarIcon(active: !model.selected.isEmpty, badge: model.update != nil)
         }
         .menuBarExtraStyle(.window)
     }
