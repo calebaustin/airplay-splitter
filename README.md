@@ -12,6 +12,11 @@ Send your screen, a window, or an iPhone to several AirPlay TVs at once, right f
   <img alt="License GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-555">
 </p>
 
+<p align="center">
+  <a href="https://www.buymeacoffee.com/calebaustinm"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FF5F5F?style=for-the-badge&logo=buymeacoffee&logoColor=white"></a>
+  <br><sub><b>Free to use, forever.</b> If it helps your church or team, a coffee keeps new features coming.</sub>
+</p>
+
 ---
 
 macOS mirrors to **one** AirPlay TV at a time. AirPlay Splitter sends the same picture, and sound if you want
@@ -139,6 +144,14 @@ See [ROADMAP.md](ROADMAP.md) for what's planned next.
 - **Logs:** `~/Library/Application Support/AirPlaySplitter/`
 
 ## Thank you
+
+<table align="right" width="290">
+  <tr><td align="center">
+    <b>Has this tool been helpful to you?</b><br>
+    <sub>Consider supporting future development.<br>This app is free to use, forever.</sub><br><br>
+    <a href="https://www.buymeacoffee.com/calebaustinm"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FF5F5F?style=for-the-badge&logo=buymeacoffee&logoColor=white"></a>
+  </td></tr>
+</table>
 
 AirPlay Splitter is a small app standing on a lot of generous work. Thank you to everyone below.
 
