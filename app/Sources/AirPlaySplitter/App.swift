@@ -36,6 +36,7 @@ struct AirPlaySplitterApp: App {
         if CommandLine.arguments.contains("--rtp-selftest") {
             let s = ScreenStreamer(rtpPort: SplitterModel.rtpPort, audioPort: SplitterModel.audioPort)
             do { try s.startTestPattern() } catch { print(error); exit(1) }
+            s.blank = CommandLine.arguments.contains("--blank")
             RunLoop.main.run(until: Date().addingTimeInterval(8))
             s.stop()
             exit(0)

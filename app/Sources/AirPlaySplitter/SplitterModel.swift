@@ -90,9 +90,27 @@ final class SplitterModel: ObservableObject {
         let name: String
     }
 
+    /// TVs found on the network now, plus remembered TVs that were used before.
     @Published var tvs: [DaemonClient.Device] = []
+    /// TVs remembered from earlier that aren't on the network right now.
+    @Published private(set) var missing: Set<String> = []          // by IP
     @Published var streams: [String: DaemonClient.Stream] = [:]   // by IP
-    @Published var selected: Set<String> = []                      // IPs the user ticked
+    @Published var selected: Set<String> = [] {                    // IPs the user ticked
+        didSet { selectionChanged() }
+    }
+    /// Switched-on TVs that dropped and are being reconnected automatically.
+    @Published private(set) var reconnecting: Set<String> = []
+    /// Black screens and silence on every TV, without disconnecting.
+    @Published var blanked = false { didSet { streamer.blank = blanked } }
+
+    /// Remembered TVs, by a stable key (device ID, or name).
+    private var known: [String: KnownTV] = KnownTV.load()
+    private var discovered: [DaemonClient.Device] = []
+    private var retries: [String: (attempts: Int, next: Date)] = [:]
+    private var awake: NSObjectProtocol?
+    private let outline = RegionOutline()
+    /// Sample-data mode for screenshots: never touches saved settings.
+    private let isPreview: Bool
     @Published var displays: [DisplayChoice] = []
     @Published var source: Source = .display(CGMainDisplayID()) { didSet { sourceChanged(from: oldValue) } }
     @Published var pinFor: DaemonClient.Device?
@@ -118,6 +136,7 @@ final class SplitterModel: ObservableObject {
     /// `preview` skips the daemon and network so the menu can be rendered
     /// with sample data (`--render-menu`).
     init(preview: Bool = false) {
+        isPreview = preview
         stateDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("AirPlaySplitter", isDirectory: true)
         try? FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
@@ -133,12 +152,13 @@ final class SplitterModel: ObservableObject {
             // NetService delivers on the main run loop.
             MainActor.assumeIsolated {
                 let me = Host.current().localizedName ?? ""
-                self?.tvs = list
-                    .filter { $0.name != Self.receiverName && $0.name != me }
-                    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                self?.discovered = list.filter { $0.name != Self.receiverName && $0.name != me }
+                self?.mergeTVs()
             }
         }
         discovery.start()
+        mergeTVs()
+        restoreSource()
         poll = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
@@ -154,14 +174,110 @@ final class SplitterModel: ObservableObject {
     func toggle(_ tv: DaemonClient.Device) {
         if selected.contains(tv.ip) {
             selected.remove(tv.ip)
+            retries[tv.ip] = nil
+            reconnecting.remove(tv.ip)
             if pinFor?.ip == tv.ip { pinFor = nil }
             _ = try? client.send(["cmd": "disconnect", "target": tv.ip])
         } else {
             selected.insert(tv.ip)
+            // Give the first connection a head start before smart reconnect
+            // treats a missing stream as a drop.
+            retries[tv.ip] = (attempts: 0, next: Date().addingTimeInterval(5))
+            remember(tv, used: true)
             ensureSource()
             connect(tv, pin: nil)
         }
         updateCapture()
+    }
+
+    // MARK: memory
+
+    /// Names of the TVs used together last time, if any.
+    var lastGroupNames: [String] {
+        (UserDefaults.standard.stringArray(forKey: "lastGroup") ?? []).compactMap { known[$0]?.name }
+    }
+
+    /// Switches the last group back on (the "Reconnect" button).
+    func reconnectLastGroup() {
+        for key in UserDefaults.standard.stringArray(forKey: "lastGroup") ?? [] {
+            guard let k = known[key] else { continue }
+            let tv = tvs.first { KnownTV.key(for: $0) == key } ?? k.device
+            if !selected.contains(tv.ip) { toggle(tv) }
+        }
+    }
+
+    func refreshTVs() { discovery.restart() }
+
+    private func remember(_ tv: DaemonClient.Device, used: Bool) {
+        let key = KnownTV.key(for: tv)
+        var k = known[key] ?? KnownTV(name: tv.name, model: tv.model, ip: tv.ip, port: tv.port, deviceID: tv.device_id)
+        k.name = tv.name; k.ip = tv.ip; k.port = tv.port
+        if used { k.lastUsed = Date() }
+        known[key] = k
+        KnownTV.save(known)
+    }
+
+    /// Found TVs, plus remembered ones that were used before but aren't
+    /// visible right now (so a dropped Apple TV can still be switched on).
+    private func mergeTVs() {
+        for tv in discovered where known[KnownTV.key(for: tv)] != nil { remember(tv, used: false) }
+        let foundKeys = Set(discovered.map(KnownTV.key(for:)))
+        let absent = known.filter { !foundKeys.contains($0.key) && $0.value.lastUsed != nil }.map(\.value.device)
+        missing = Set(absent.map(\.ip))
+        tvs = (discovered + absent)
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private func selectionChanged() {
+        guard !isPreview else { return }
+        if !selected.isEmpty {
+            let keys = tvs.filter { selected.contains($0.ip) }.map(KnownTV.key(for:))
+            UserDefaults.standard.set(keys, forKey: "lastGroup")
+        }
+        keepAwake(!selected.isEmpty)
+        if selected.isEmpty { blanked = false }
+        updateOutline()
+    }
+
+    private func restoreSource() {
+        switch UserDefaults.standard.string(forKey: "source") {
+        case "test": source = .testPattern
+        case "phones": source = .phones
+        case let s? where s.hasPrefix("display:"):
+            if let id = UInt32(s.dropFirst(8)), displays.contains(where: { $0.id == id }) { source = .display(id) }
+        default: break
+        }
+    }
+
+    private func saveSource() {
+        guard !isPreview else { return }
+        let value: String? = switch source {
+        case .display(let id): "display:\(id)"
+        case .testPattern: "test"
+        case .phones: "phones"
+        case .region, .window: nil   // need choosing again each time
+        }
+        if let value { UserDefaults.standard.set(value, forKey: "source") }
+    }
+
+    /// Stops the Mac sleeping (display included) while anything is being sent.
+    private func keepAwake(_ on: Bool) {
+        if on, awake == nil {
+            awake = ProcessInfo.processInfo.beginActivity(
+                options: [.idleDisplaySleepDisabled, .idleSystemSleepDisabled, .userInitiated],
+                reason: "Sending to AirPlay TVs")
+        } else if !on, let a = awake {
+            ProcessInfo.processInfo.endActivity(a)
+            awake = nil
+        }
+    }
+
+    private func updateOutline() {
+        guard case .region(let id) = source, let rect = region,
+              let screen = NSScreen.screens.first(where: {
+                  ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == id
+              }) else { outline.hide(); return }
+        outline.show(rect, on: screen, live: !selected.isEmpty)
     }
 
     func submitPIN(_ pin: String) {
@@ -173,6 +289,8 @@ final class SplitterModel: ObservableObject {
     func stopAll() {
         _ = try? client.send(["cmd": "disconnect"])
         selected.removeAll()
+        retries.removeAll()
+        reconnecting.removeAll()
         updateCapture()
     }
 
@@ -214,7 +332,8 @@ final class SplitterModel: ObservableObject {
 
     // MARK: daemon
 
-    private func connect(_ tv: DaemonClient.Device, pin: String?) {
+    /// - quiet: automatic retries don't show errors (the row says Reconnecting).
+    private func connect(_ tv: DaemonClient.Device, pin: String?, quiet: Bool = false) {
         var req: [String: Any] = ["cmd": "connect", "target": tv.ip, "port": tv.port]
         if !tv.device_id.isEmpty { req["device_id"] = tv.device_id }
         if let pin { req["pin"] = pin }
@@ -223,7 +342,7 @@ final class SplitterModel: ObservableObject {
             Task { @MainActor in
                 if r?.needs_pin == true || r?.needs_credential == true || r?.state == "pin_required" {
                     self.pinFor = tv
-                } else if let e = r?.error, !e.isEmpty {
+                } else if let e = r?.error, !e.isEmpty, !quiet {
                     self.message = "\(tv.name): \(e)"
                 }
             }
@@ -234,6 +353,7 @@ final class SplitterModel: ObservableObject {
         DispatchQueue.global().async { [client] in
             let status = try? client.send(["cmd": "status"])
             Task { @MainActor in
+                guard status != nil else { return }   // daemon busy or restarting
                 var byIP: [String: DaemonClient.Stream] = [:]
                 for s in status?.streams ?? [] { byIP[s.device_ip] = s }
                 self.streams = byIP
@@ -241,7 +361,28 @@ final class SplitterModel: ObservableObject {
                    self.pinFor == nil, let tv = self.tvs.first(where: { $0.ip == pending.device_ip }) {
                     self.pinFor = tv
                 }
+                self.reconnectDropped()
             }
+        }
+    }
+
+    /// Smart reconnect: a switched-on TV with no stream (it dropped, rebooted
+    /// or lost Wi-Fi) is retried on its own, waiting 3, 6, 12 … up to 30 s.
+    private func reconnectDropped() {
+        let now = Date()
+        for ip in selected {
+            if let s = streams[ip] {
+                if s.state == "streaming" { retries[ip] = nil; reconnecting.remove(ip) }
+                continue
+            }
+            guard pinFor?.ip != ip, let tv = tvs.first(where: { $0.ip == ip }) else { continue }
+            var r = retries[ip] ?? (attempts: 0, next: now)
+            guard now >= r.next else { continue }
+            r.attempts += 1
+            r.next = now.addingTimeInterval(min(30, 3 * pow(2, Double(r.attempts - 1))))
+            retries[ip] = r
+            reconnecting.insert(ip)
+            connect(tv, pin: nil, quiet: true)
         }
     }
 
@@ -282,7 +423,7 @@ final class SplitterModel: ObservableObject {
         regionSelector.select(on: screen) { [weak self] rect in
             guard let self, let rect else { return }
             self.region = rect
-            if self.source == .region(id) { self.restartCapture() } else { self.source = .region(id) }
+            if self.source == .region(id) { self.updateOutline(); self.restartCapture() } else { self.source = .region(id) }
         }
     }
 
@@ -313,9 +454,13 @@ final class SplitterModel: ObservableObject {
     }
 
     private func sourceChanged(from old: Source) {
+        guard !isPreview else { return }
         if case .phones = old, source != .phones { uxplay?.terminate(); uxplay = nil }
         if source == .phones, !selected.isEmpty, uxplay == nil { startUxPlay() }
+        if source == .phones { blanked = false }   // phone video bypasses the app
         preview = nil
+        saveSource()
+        updateOutline()
         restartCapture()
     }
 
@@ -438,4 +583,31 @@ final class PickerObserver: NSObject, SCContentSharingPickerObserver {
     }
     func contentSharingPicker(_ picker: SCContentSharingPicker, didCancelFor stream: SCStream?) {}
     func contentSharingPickerStartDidFailWithError(_ error: Error) {}
+}
+
+/// A TV the app has seen, kept between launches (connection memory).
+struct KnownTV: Codable {
+    var name: String
+    var model: String
+    var ip: String
+    var port: Int
+    var deviceID: String
+    var lastUsed: Date?
+
+    var device: DaemonClient.Device {
+        DaemonClient.Device(name: name, model: model, ip: ip, port: port, device_id: deviceID)
+    }
+
+    /// Device IDs survive address changes; fall back to the name.
+    static func key(for d: DaemonClient.Device) -> String { d.device_id.isEmpty ? "name:" + d.name : d.device_id }
+
+    static func load() -> [String: KnownTV] {
+        guard let data = UserDefaults.standard.data(forKey: "knownTVs"),
+              let v = try? JSONDecoder().decode([String: KnownTV].self, from: data) else { return [:] }
+        return v
+    }
+
+    static func save(_ v: [String: KnownTV]) {
+        if let data = try? JSONEncoder().encode(v) { UserDefaults.standard.set(data, forKey: "knownTVs") }
+    }
 }

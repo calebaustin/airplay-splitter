@@ -21,17 +21,12 @@ right (with arrows) between pages:
 3. **Schedule and places:** presets, Wi-Fi locations, timed changes
 4. **Settings:** audio, sleep, reconnect
 
-## Next: reliability (small, high value)
+## Done in 0.3.0
 
-| Feature | Notes |
-|---|---|
-| **Smart reconnect** | If a TV drops, retry on its own with backoff, and show "Reconnecting" on that row. |
-| **Connection memory** | Remember each TV's name, address, pairing and preferred settings. Pairing is already saved by doubletake; this adds the rest. |
-| **Refresh** | A button to look for new TVs now. |
-| **Blank displays** | Send black to selected TVs. Same mechanism as the test pattern, so it's cheap. |
-| **Keep the Mac awake** | Block sleep while sending. One system call. |
+- Smart reconnect, connection memory with “Last time”, Refresh, Blank, keep the Mac awake, and an outline
+  around a shared area.
 
-## Then: content sources (what sets this apart)
+## Next: content sources (what sets this apart)
 
 These all plug into the same path the test pattern uses. The app draws frames and every selected TV gets
 them, so every screen stays in sync by design.

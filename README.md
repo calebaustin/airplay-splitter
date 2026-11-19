@@ -36,6 +36,10 @@ something onto every screen.
 - **Sound on or off.** One switch sends the Mac's audio to the TVs too. It's off by default so a room's own
   speakers don't double up.
 - **See what's live.** A small preview shows exactly what the TVs are showing.
+- **Made for live moments.** **Blank** sends black to every TV without disconnecting. A dropped TV
+  reconnects by itself. The Mac stays awake while sending. A dashed outline marks a shared area.
+- **Remembers your rooms.** TVs you've used stay listed, and **Last time** switches your usual group back on
+  in one click.
 - **Built for big buildings.** Dozens of TVs scroll in a compact list, and the ones you've switched on stay at
   the top.
 - **One encoder for every TV.** The picture is encoded once with the Mac's hardware encoder and shared, so

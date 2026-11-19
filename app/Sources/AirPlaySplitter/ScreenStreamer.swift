@@ -44,7 +44,10 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
     }
 
     func start(display: SCDisplay, sourceRect: CGRect? = nil, captureAudio: Bool) async throws {
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        // Leave this app's own windows (menu, area outline) out of the picture.
+        let mine = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+            .applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
+        let filter = SCContentFilter(display: display, excludingApplications: mine ?? [], exceptingWindows: [])
         let size = sourceRect?.size ?? CGSize(width: display.width, height: display.height)
         try await start(filter: filter, contentSize: size, sourceRect: sourceRect, captureAudio: captureAudio)
     }
@@ -71,7 +74,7 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
         cfg.sampleRate = AudioPump.sampleRate
         cfg.channelCount = 2
         config = cfg
-        audio.muted = !captureAudio
+        setAudio(captureAudio)
 
         let s = SCStream(filter: filter, configuration: cfg, delegate: nil)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
@@ -154,7 +157,33 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
     // MARK: capture
 
     /// Turns sending the Mac's sound on or off without restarting capture.
-    func setAudio(_ on: Bool) { audio.muted = !on }
+    func setAudio(_ on: Bool) { soundWanted = on; audio.muted = !on || blank }
+    private var soundWanted = false
+
+    /// Sends black (and silence) to every TV while true, without disconnecting.
+    var blank = false {
+        didSet { audio.muted = blank || !soundWanted }
+    }
+    private var blackBuffer: CVPixelBuffer?
+
+    private func black(like pb: CVPixelBuffer) -> CVPixelBuffer {
+        let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)
+        if let b = blackBuffer, CVPixelBufferGetWidth(b) == w, CVPixelBufferGetHeight(b) == h { return b }
+        var out: CVPixelBuffer?
+        let attrs = [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary
+        CVPixelBufferCreate(nil, w, h, kCVPixelFormatType_32BGRA, attrs, &out)
+        guard let out else { return pb }
+        CVPixelBufferLockBaseAddress(out, [])
+        if let base = CVPixelBufferGetBaseAddress(out) {
+            memset(base, 0, CVPixelBufferGetBytesPerRow(out) * h)
+            // BGRA: set alpha to opaque.
+            let p = base.assumingMemoryBound(to: UInt8.self)
+            for i in stride(from: 3, to: CVPixelBufferGetBytesPerRow(out) * h, by: 4) { p[i] = 255 }
+        }
+        CVPixelBufferUnlockBaseAddress(out, [])
+        blackBuffer = out
+        return out
+    }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sb: CMSampleBuffer, of type: SCStreamOutputType) {
         if type == .audio {
@@ -177,8 +206,9 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
 
     // MARK: encode
 
-    private func encode(_ pb: CVPixelBuffer) {
+    private func encode(_ frame: CVPixelBuffer) {
         guard let session else { return }
+        let pb = blank ? black(like: frame) : frame
         lastFrameTime = CFAbsoluteTimeGetCurrent()
         let pts = CMTime(value: frameIndex, timescale: fps)
         frameIndex += 1

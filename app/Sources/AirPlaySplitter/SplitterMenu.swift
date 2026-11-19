@@ -179,7 +179,14 @@ struct SplitterMenu: View {
 
     private var receiversSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("Send to")
+            HStack {
+                sectionLabel("Send to")
+                Spacer()
+                Button { model.refreshTVs() } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless).foregroundStyle(.secondary).controlSize(.small)
+                    .help("Look for TVs again")
+            }
+            if model.selected.isEmpty, !model.lastGroupNames.isEmpty { lastGroupCard }
             Group {
                 if model.tvs.isEmpty {
                     HStack(spacing: 8) {
@@ -240,6 +247,22 @@ struct SplitterMenu: View {
         return min(natural, rows * Tokens.rowHeight + pin)
     }
 
+    private var lastGroupCard: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Last time").font(.caption.weight(.semibold))
+                Text(model.lastGroupNames.joined(separator: ", "))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 6)
+            Button("Reconnect") { model.reconnectLastGroup() }
+                .buttonStyle(.borderedProminent).controlSize(.small)
+        }
+        .padding(10)
+        .glass(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
+    }
+
     // MARK: notices
 
     private var accessNotice: some View {
@@ -293,6 +316,13 @@ struct SplitterMenu: View {
             Button("Stop All") { model.stopAll() }
                 .disabled(model.selected.isEmpty)
             Spacer()
+            Toggle(isOn: $model.blanked) {
+                Label(model.blanked ? "Unblank" : "Blank", systemImage: model.blanked ? "eye" : "eye.slash")
+            }
+            .toggleStyle(.button)
+            .disabled(model.selected.isEmpty || model.source == .phones)
+            .help("Show black on every TV without disconnecting")
+            Spacer()
             Button("Quit") { NSApp.terminate(nil) }
         }
         .controlSize(.regular)
@@ -331,6 +361,7 @@ struct ReceiverRow: View {
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tv.name).lineLimit(1).truncationMode(.tail)
+                        .foregroundStyle(model.missing.contains(tv.ip) && !model.selected.contains(tv.ip) ? .secondary : .primary)
                     if let (label, color) = status {
                         HStack(spacing: 4) {
                             Circle().fill(color).frame(width: 6, height: 6)
@@ -390,7 +421,12 @@ struct ReceiverRow: View {
     }
 
     private var status: (String, Color)? {
-        guard model.selected.contains(tv.ip) else { return nil }
+        guard model.selected.contains(tv.ip) else {
+            return model.missing.contains(tv.ip) ? ("Not found right now", .secondary) : nil
+        }
+        if model.reconnecting.contains(tv.ip), model.streams[tv.ip]?.state != "streaming" {
+            return ("Reconnecting", Tokens.busy)
+        }
         return switch model.streams[tv.ip]?.state {
             case "streaming": ("Showing", Tokens.live)
             case "pin_required": ("Waiting for PIN", Tokens.busy)

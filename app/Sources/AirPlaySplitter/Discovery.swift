@@ -13,6 +13,15 @@ final class Discovery: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
         browser.searchForServices(ofType: "_airplay._tcp.", inDomain: "local.")
     }
 
+    /// Looks again from scratch (the Refresh button).
+    func restart() {
+        browser.stop()
+        pending.removeAll()
+        found.removeAll()
+        publish()
+        start()
+    }
+
     func netServiceBrowser(_ b: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
         pending.insert(service)
         service.delegate = self

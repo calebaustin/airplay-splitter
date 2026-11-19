@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 · November 19, 2026
+
+### Added
+- **Area outline.** When you share part of a screen, a dashed line stays around it so you always know what
+  the TVs show. It sits just outside the area, so it never appears on the TVs.
+- **Smart reconnect.** If a switched-on TV drops, the app reconnects it by itself and shows “Reconnecting”.
+- **Remembers your TVs.** TVs you've used stay in the list even before they're found, and **Last time**
+  switches your last group of TVs back on in one click. The chosen screen is remembered too.
+- **Blank.** Send black (and silence) to every TV without disconnecting, then bring the picture back.
+- **Refresh** looks for TVs again.
+- **Keeps the Mac awake** while sending, so the TVs don't go dark mid-service.
+
+### Changed
+- The app's own windows are left out of screen captures.
+
 ## 0.2.1 · November 19, 2026
 
 ### Added
