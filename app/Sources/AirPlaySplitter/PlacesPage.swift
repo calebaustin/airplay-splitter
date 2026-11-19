@@ -12,7 +12,7 @@ struct PlacesPage: View {
             }
         }
         .scrollIndicators(.automatic)
-        .frame(minHeight: 140, idealHeight: Tokens.pageCap, maxHeight: Tokens.pageCap)
+        .frame(maxHeight: .infinity, alignment: .top)
         .clipShape(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
     }
 }

@@ -62,6 +62,8 @@ struct SplitterMenu: View {
             // the arrows and page names are there too, but optional.
             VStack(alignment: .leading, spacing: Tokens.gap) {
                 pageBar
+                // One fixed height for every page, so switching pages never
+                // resizes the menu (resizing is what pulled it off the bar).
                 Group {
                     switch page {
                     case 0: receiversSection
@@ -69,6 +71,8 @@ struct SplitterMenu: View {
                     default: PlacesPage(model: model)
                     }
                 }
+                .frame(height: Tokens.pageCap, alignment: .top)
+                .clipped()
                 .transition(.opacity)
                 .id(page)
             }
@@ -82,11 +86,7 @@ struct SplitterMenu: View {
         .glassGroup()
         // Always hang from the menu bar, sized to fit: refit whenever something
         // that changes the menu's height changes.
-        .background(MenuAnchor(trigger: AnyHashable([
-            AnyHashable(page), AnyHashable(model.pinFor?.ip), AnyHashable(model.message),
-            AnyHashable(model.update?.version), AnyHashable(model.needsScreenAccess),
-            AnyHashable(model.tvs.count), AnyHashable(model.selected.count), AnyHashable(model.source),
-        ])))
+        .background(MenuAnchor())
         .task { await model.loadDisplays() }
         .onAppear { model.previewVisible = true }
         .onDisappear { model.previewVisible = false }
@@ -285,7 +285,7 @@ struct SplitterMenu: View {
                             }
                         }
                         .scrollIndicators(.automatic)
-                        .frame(height: listHeight)
+                        .frame(maxHeight: listHeight)
                         .onChange(of: model.pinFor?.ip) { _, ip in
                             if let ip { withAnimation { proxy.scrollTo(ip, anchor: .center) } }
                         }

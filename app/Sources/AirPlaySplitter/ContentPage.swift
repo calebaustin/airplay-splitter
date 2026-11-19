@@ -12,9 +12,8 @@ struct ContentPage: View {
             cards
         }
         .scrollIndicators(.automatic)
-        // Flexible: as tall as the cap allows, but shrinks (and scrolls) when
-        // the rest of the menu needs room, so the menu never outgrows the screen.
-        .frame(minHeight: 140, idealHeight: Tokens.pageCap, maxHeight: Tokens.pageCap)
+        // Fills the menu's fixed page area and scrolls inside it.
+        .frame(maxHeight: .infinity, alignment: .top)
         // Glass draws in its own layer; keep it inside the scroll area.
         .clipShape(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
     }

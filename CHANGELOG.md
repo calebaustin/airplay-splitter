@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 · November 19, 2026
+
+### Fixed
+- The menu stays attached to the menu bar on every page. TVs, Content and Places now share one height, so
+  switching pages never resizes the menu; each page scrolls inside it.
+
 ## 0.6.0 · November 19, 2026
 
 ### Added
