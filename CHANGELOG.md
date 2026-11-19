@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 · November 19, 2026
+
+### Added
+- **Places.** Save the TVs for a room ("Sanctuary", "Youth Room") and connect them all with one click. When
+  most of a place's TVs are on the network, the TVs page asks "At Sanctuary?" with a Connect button. It
+  recognizes the place by the TVs it can see, so it needs no Wi-Fi name or location permission.
+- **Schedule.** Run things at set times on chosen days while the app is open: connect a place, start a
+  countdown, show the holding screen or the main screen, blank the TVs, or stop all.
+- A third page, **Places**, holds both.
+
+### Fixed
+- After swiping to a taller page, the menu could be cut off at the top and bottom. It now resizes to fit,
+  never grows past the screen, and stays attached to the menu bar.
+
 ## 0.5.0 · November 19, 2026
 
 ### Added

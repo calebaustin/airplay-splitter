@@ -36,14 +36,17 @@ right (with arrows) between pages:
 - Video playback with sound, web pages (including local files), countdown to an end time, and trackpad
   swiping between pages.
 
+## Done in 0.6.0
+
+- Places (saved TV groups, recognized by the TVs on the network, no location permission) and schedules.
+
 ## Next: bigger pieces
 
 | Feature | Notes and trade-offs |
 |---|---|
-| **Places (Wi-Fi presets)** | Church Wi-Fi shows Sanctuary, Lobby, Classrooms; home shows Living Room, Bedroom. macOS only reveals the Wi-Fi name to apps with **Location** permission, so this needs one more permission prompt. Matching by the TVs that are visible is a fallback that needs none. |
-| **Schedules** | Connect to certain TVs at set times, or switch what's shown on a timer (for example, at 7:00 PM switch to the holding screen). Runs only while the app is open. |
 | **Different content per TV** | Sanctuary shows the slides while the lobby shows the countdown. Each extra source needs its own encoder, so it costs more CPU per source; TVs on the same source still share one. |
 | **Audio routing** | Choose where sound plays: on the TVs, on the Mac, or both. |
+| **Wi-Fi name for places** | Optional extra signal for recognizing a place. Needs Location permission, so only if visible-TV matching isn't enough. |
 
 ## Not planned
 

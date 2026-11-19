@@ -12,7 +12,9 @@ struct ContentPage: View {
             cards
         }
         .scrollIndicators(.automatic)
-        .frame(height: max(300, (NSScreen.main?.visibleFrame.height ?? 800) * 0.45))
+        // Flexible: as tall as the cap allows, but shrinks (and scrolls) when
+        // the rest of the menu needs room, so the menu never outgrows the screen.
+        .frame(minHeight: 140, idealHeight: Tokens.pageCap, maxHeight: Tokens.pageCap)
         // Glass draws in its own layer; keep it inside the scroll area.
         .clipShape(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
     }

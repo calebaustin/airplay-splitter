@@ -9,6 +9,10 @@ enum Tokens {
     static let width: CGFloat = 340
     static let rowHeight: CGFloat = 40   // one TV row (34pt content + divider)
     static let pinHeight: CGFloat = 62   // the PIN box under a row
+    /// Tallest a scrolling page may be (about 45% of the screen).
+    @MainActor static var pageCap: CGFloat { max(300, (NSScreen.main?.visibleFrame.height ?? 800) * 0.45) }
+    /// Tallest the whole menu may be: the screen below the menu bar, minus a margin.
+    @MainActor static var menuCap: CGFloat { (NSScreen.main?.visibleFrame.height ?? 800) - 16 }
     static let live = Color.green
     static let busy = Color.orange
     static let warn = Color.orange
@@ -40,7 +44,7 @@ struct SplitterMenu: View {
     @ObservedObject var model: SplitterModel
     /// 0 = TVs, 1 = Content. What's live stays pinned above the pages.
     @State private var page: Int
-    private let pages = ["TVs", "Content"]
+    private let pages = ["TVs", "Content", "Places"]
 
     init(model: SplitterModel, page: Int = 0) {
         self.model = model
@@ -59,7 +63,11 @@ struct SplitterMenu: View {
             VStack(alignment: .leading, spacing: Tokens.gap) {
                 pageBar
                 Group {
-                    if page == 0 { receiversSection } else { ContentPage(model: model) }
+                    switch page {
+                    case 0: receiversSection
+                    case 1: ContentPage(model: model)
+                    default: PlacesPage(model: model)
+                    }
                 }
                 .transition(.opacity)
                 .id(page)
@@ -70,8 +78,15 @@ struct SplitterMenu: View {
         }
         .padding(Tokens.pad)
         .frame(width: Tokens.width)
+        .frame(maxHeight: Tokens.menuCap)   // never taller than the screen
         .glassGroup()
-        .background(MenuAnchor())   // always hang from the menu bar
+        // Always hang from the menu bar, sized to fit: refit whenever something
+        // that changes the menu's height changes.
+        .background(MenuAnchor(trigger: AnyHashable([
+            AnyHashable(page), AnyHashable(model.pinFor?.ip), AnyHashable(model.message),
+            AnyHashable(model.update?.version), AnyHashable(model.needsScreenAccess),
+            AnyHashable(model.tvs.count), AnyHashable(model.selected.count), AnyHashable(model.source),
+        ])))
         .task { await model.loadDisplays() }
         .onAppear { model.previewVisible = true }
         .onDisappear { model.previewVisible = false }
@@ -243,7 +258,11 @@ struct SplitterMenu: View {
                         .help("Look for TVs again")
                 }
             }
-            if model.selected.isEmpty, !model.lastGroupNames.isEmpty { lastGroupCard }
+            if model.selected.isEmpty, let place = model.suggestedPlace {
+                placeCard(place)
+            } else if model.selected.isEmpty, !model.lastGroupNames.isEmpty {
+                lastGroupCard
+            }
             Group {
                 if model.tvs.isEmpty {
                     HStack(spacing: 8) {
@@ -302,6 +321,23 @@ struct SplitterMenu: View {
         let pin: CGFloat = model.pinFor == nil ? 0 : Tokens.pinHeight
         let natural = CGFloat(model.tvs.count) * Tokens.rowHeight + statusLines + pin
         return min(natural, rows * Tokens.rowHeight + pin)
+    }
+
+    /// "At Sanctuary?" when most of a saved place's TVs are visible.
+    private func placeCard(_ p: Place) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "mappin.and.ellipse").foregroundStyle(Tokens.live)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("At \(p.name)?").font(.caption.weight(.semibold))
+                Text(model.tvNames(in: p).joined(separator: ", "))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 6)
+            Button("Connect") { model.connectPlace(p) }
+                .buttonStyle(.borderedProminent).controlSize(.small)
+        }
+        .padding(10)
+        .glass(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
     }
 
     private var lastGroupCard: some View {

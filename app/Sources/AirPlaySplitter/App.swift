@@ -124,7 +124,13 @@ struct AirPlaySplitterApp: App {
         m.pinFor = m.tvs[0]
         m.displays = [.init(id: 1, name: "VY249 (1920×1080)")]
         m.source = .display(1)
-        m.hasScreenAccess = true
+        m.hasScreenAccess = !CommandLine.arguments.contains("--no-access")
+        if CommandLine.arguments.contains("--places") {
+            let sanctuary = Place(name: "Sanctuary", tvKeys: ["10.0.0.184", "10.0.0.186"])
+            m.places = [sanctuary, Place(name: "Youth Room", tvKeys: ["10.0.0.7"])]
+            m.schedule = [ScheduleItem(hour: 9, minute: 45, days: [1], action: .countdown(minutes: 15)),
+                          ScheduleItem(hour: 19, minute: 0, days: Set(2...6), action: .connectPlace(sanctuary.id))]
+        }
         // Optional `--preview-image file.png` fills the preview thumbnail.
         if let j = CommandLine.arguments.firstIndex(of: "--preview-image"), j + 1 < CommandLine.arguments.count,
            let img = NSImage(contentsOfFile: CommandLine.arguments[j + 1]) {
@@ -132,7 +138,7 @@ struct AirPlaySplitterApp: App {
         }
         // ImageRenderer can't draw AppKit-backed controls; host it in a window.
         _ = NSApplication.shared
-        let host = NSHostingView(rootView: SplitterMenu(model: m, page: CommandLine.arguments.contains("--content") ? 1 : 0))
+        let host = NSHostingView(rootView: SplitterMenu(model: m, page: CommandLine.arguments.contains("--places") ? 2 : CommandLine.arguments.contains("--content") ? 1 : 0))
         let size = host.fittingSize
         host.frame = CGRect(origin: .zero, size: size)
         let win = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)

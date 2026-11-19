@@ -140,6 +140,12 @@ final class SplitterModel: ObservableObject {
     /// Black screens and silence on every TV, without disconnecting.
     @Published var blanked = false { didSet { streamer.blank = blanked } }
 
+    /// Saved groups of TVs, and timed actions (see Places.swift).
+    @Published var places: [Place] = PlacesStore.loadPlaces() { didSet { if !isPreview { PlacesStore.savePlaces(places) } } }
+    @Published var schedule: [ScheduleItem] = PlacesStore.loadSchedule() { didSet { if !isPreview { PlacesStore.saveSchedule(schedule) } } }
+    /// Minute each schedule item last ran, so it runs once per minute.
+    var firedSchedule: [UUID: Int] = [:]
+
     /// Remembered TVs, by a stable key (device ID, or name).
     private var known: [String: KnownTV] = KnownTV.load()
     private var discovered: [DaemonClient.Device] = []
@@ -203,7 +209,7 @@ final class SplitterModel: ObservableObject {
         mergeTVs()
         restoreSource()
         poll = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in self?.refresh(); self?.runSchedule() }
         }
         Task { await loadDisplays() }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,

@@ -45,8 +45,10 @@ something onto every screen.
 - **See what's live.** A small preview shows exactly what the TVs are showing.
 - **Made for live moments.** **Blank** sends black to every TV without disconnecting. A dropped TV
   reconnects by itself. The Mac stays awake while sending. A dashed outline marks a shared area.
-- **Remembers your rooms.** TVs you've used stay listed, and **Last time** switches your usual group back on
-  in one click.
+- **Remembers your rooms.** Save a room's TVs as a **Place** and connect them in one click. When you walk
+  into that building, the app recognizes it from the TVs it can see and offers to connect.
+- **Runs on a schedule.** Start a countdown at 9:45 every Sunday, connect the sanctuary at 7 PM on weekdays,
+  or show the holding screen at a set time.
 - **Built for big buildings.** Dozens of TVs scroll in a compact list, and the ones you've switched on stay at
   the top.
 - **One encoder for every TV.** The picture is encoded once with the Mac's hardware encoder and shared, so
