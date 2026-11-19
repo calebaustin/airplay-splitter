@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 · November 19, 2026
+
+### Added
+- **Content page.** Put things on the TVs without sharing your screen:
+  - **Image:** drop a picture onto the menu (or choose one) and show it on every TV.
+  - **Holding screen:** a title, subtitle, logo and background color, remembered between services.
+  - **Countdown:** 5, 10, 15 and 30 minute presets or your own time, in sync on every TV.
+- **Pages.** What's live stays at the top; arrows (or a drag) switch between the TVs and Content pages.
+
+### Fixed
+- The menu always hangs from the menu bar. It no longer slides down when it gets shorter, such as during
+  Refresh, and Refresh keeps the TV list in place while it looks again.
+
 ## 0.3.0 · November 19, 2026
 
 ### Added

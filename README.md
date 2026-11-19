@@ -35,6 +35,8 @@ something onto every screen.
   out**, an **iPhone or iPad**, or a **test pattern**.
 - **Sound on or off.** One switch sends the Mac's audio to the TVs too. It's off by default so a room's own
   speakers don't double up.
+- **Put content up without your screen.** The **Content** page shows an image you drop in, a holding
+  screen with your logo, or a countdown, identical on every TV.
 - **See what's live.** A small preview shows exactly what the TVs are showing.
 - **Made for live moments.** **Blank** sends black to every TV without disconnecting. A dropped TV
   reconnects by itself. The Mac stays awake while sending. A dashed outline marks a shared area.
@@ -46,6 +48,13 @@ something onto every screen.
   adding a fourth TV costs almost nothing.
 - **Nothing else to install.** Everything it needs is inside the app.
 - **Stays up to date.** It checks GitHub once a day and offers a one-click download when a new version is out.
+
+<p align="center">
+  <img src="docs/menu-content.png" width="300" alt="The Content page: an image drop zone, a holding screen with title, subtitle, logo and background color, and countdown presets.">
+  &nbsp;&nbsp;
+  <img src="docs/countdown.png" width="520" alt="A countdown on the TVs: Starting in 9:41 on a navy background, with Welcome below.">
+  <br><sub>The Content page, and a countdown as the TVs show it.</sub>
+</p>
 
 <p align="center">
   <img src="docs/test-pattern.png" width="560" alt="The test pattern: color bars with the words AirPlay Splitter test and a moving black bar.">

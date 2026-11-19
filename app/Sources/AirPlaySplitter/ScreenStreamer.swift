@@ -93,16 +93,23 @@ final class ScreenStreamer: NSObject, SCStreamOutput {
     /// Streams a moving test card. Needs no Screen Recording permission, so it
     /// checks the TVs and network on its own.
     func startTestPattern() throws {
+        try startGenerated { t in Self.testCard(width: 1920, height: 1080, t: t) }
+    }
+
+    /// Streams frames the app draws itself (test card, image, holding screen,
+    /// countdown) at 1080p. `frame` gets seconds since start and may return
+    /// the same buffer each time for still content. Silent audio keeps the
+    /// TVs' sound clock running.
+    func startGenerated(_ frame: @escaping (Double) -> CVPixelBuffer?) throws {
         stop()
-        let (w, h) = (1920, 1080)
-        try makeEncoder(width: w, height: h)
-        audio.muted = true      // keep a silent audio track running
+        try makeEncoder(width: 1920, height: 1080)
+        audio.muted = true
         audio.start()
         let started = Date()
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: .milliseconds(Int(1000 / fps)))
         t.setEventHandler { [weak self] in
-            guard let self, let pb = Self.testCard(width: w, height: h, t: Date().timeIntervalSince(started)) else { return }
+            guard let self, let pb = frame(Date().timeIntervalSince(started)) else { return }
             self.lastBuffer = pb
             self.encode(pb)
         }

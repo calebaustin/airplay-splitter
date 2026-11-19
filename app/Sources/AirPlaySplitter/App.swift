@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreImage
 
 /// Caleb's icon as a template image, so macOS tints it for the menu bar.
 /// Dimmed while nothing is being sent.
@@ -54,6 +55,20 @@ struct AirPlaySplitterApp: App {
             RunLoop.main.run(until: Date().addingTimeInterval(20))
             exit(1)
         }
+        // Developer check: `--render-content dir` writes holding and countdown frames.
+        if let i = CommandLine.arguments.firstIndex(of: "--render-content"), i + 1 < CommandLine.arguments.count {
+            let dir = URL(fileURLWithPath: CommandLine.arguments[i + 1])
+            let d = HoldingDesign.load()
+            let logo = d.logoPath.flatMap { NSImage(contentsOfFile: $0) }
+            for (name, pb) in [("holding", ContentRenderer.holding(d, logo: logo)),
+                               ("countdown", ContentRenderer.countdown(d, logo: logo, remaining: 9 * 60 + 41))] {
+                guard let pb, let cg = CIContext().createCGImage(CIImage(cvPixelBuffer: pb), from: CGRect(x: 0, y: 0, width: 1920, height: 1080))
+                else { continue }
+                try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?
+                    .write(to: dir.appendingPathComponent("\(name).png"))
+            }
+            exit(0)
+        }
         // Developer check: `--render-menu out.png` draws the menu with sample data.
         if let i = CommandLine.arguments.firstIndex(of: "--render-menu"), i + 1 < CommandLine.arguments.count {
             MainActor.assumeIsolated { renderMenu(to: CommandLine.arguments[i + 1]) }
@@ -85,7 +100,7 @@ struct AirPlaySplitterApp: App {
         }
         // ImageRenderer can't draw AppKit-backed controls; host it in a window.
         _ = NSApplication.shared
-        let host = NSHostingView(rootView: SplitterMenu(model: m))
+        let host = NSHostingView(rootView: SplitterMenu(model: m, page: CommandLine.arguments.contains("--content") ? 1 : 0))
         let size = host.fittingSize
         host.frame = CGRect(origin: .zero, size: size)
         let win = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)

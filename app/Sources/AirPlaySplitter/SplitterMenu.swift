@@ -38,6 +38,14 @@ private extension View {
 
 struct SplitterMenu: View {
     @ObservedObject var model: SplitterModel
+    /// 0 = TVs, 1 = Content. What's live stays pinned above the pages.
+    @State private var page: Int
+    private let pages = ["TVs", "Content"]
+
+    init(model: SplitterModel, page: Int = 0) {
+        self.model = model
+        _page = State(initialValue: page)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.gap) {
@@ -46,13 +54,25 @@ struct SplitterMenu: View {
             if model.gstreamerMissing { gstreamerNotice }
             sourceSection
             if model.needsScreenAccess { accessNotice }
-            receiversSection
+            pageBar
+            Group {
+                if page == 0 {
+                    receiversSection.transition(.asymmetric(insertion: .move(edge: .leading), removal: .opacity))
+                } else {
+                    ContentPage(model: model).transition(.asymmetric(insertion: .move(edge: .trailing), removal: .opacity))
+                }
+            }
+            .gesture(DragGesture(minimumDistance: 30).onEnded { v in
+                if v.translation.width < -40 { turn(to: page + 1) }
+                if v.translation.width > 40 { turn(to: page - 1) }
+            })
             if let msg = model.message { messageRow(msg) }
             footer
         }
         .padding(Tokens.pad)
         .frame(width: Tokens.width)
         .glassGroup()
+        .background(MenuAnchor())   // always hang from the menu bar
         .task { await model.loadDisplays() }
         .onAppear { model.previewVisible = true }
         .onDisappear { model.previewVisible = false }
@@ -175,6 +195,34 @@ struct SplitterMenu: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
+    // MARK: pages
+
+    private func turn(to p: Int) {
+        withAnimation(.snappy(duration: 0.22)) { page = min(max(p, 0), pages.count - 1) }
+    }
+
+    private var pageBar: some View {
+        HStack(spacing: 6) {
+            Button { turn(to: page - 1) } label: { Image(systemName: "chevron.left") }
+                .disabled(page == 0)
+            Spacer()
+            ForEach(pages.indices, id: \.self) { i in
+                Button { turn(to: i) } label: {
+                    Text(pages[i])
+                        .font(.caption.weight(page == i ? .semibold : .regular))
+                        .foregroundStyle(page == i ? .primary : .secondary)
+                        .padding(.horizontal, 10).padding(.vertical, 3)
+                        .background(page == i ? Color.primary.opacity(0.1) : .clear, in: Capsule())
+                }
+            }
+            Spacer()
+            Button { turn(to: page + 1) } label: { Image(systemName: "chevron.right") }
+                .disabled(page == pages.count - 1)
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+    }
+
     // MARK: receivers
 
     private var receiversSection: some View {
@@ -182,9 +230,13 @@ struct SplitterMenu: View {
             HStack {
                 sectionLabel("Send to")
                 Spacer()
-                Button { model.refreshTVs() } label: { Image(systemName: "arrow.clockwise") }
-                    .buttonStyle(.borderless).foregroundStyle(.secondary).controlSize(.small)
-                    .help("Look for TVs again")
+                if model.refreshing {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Button { model.refreshTVs() } label: { Image(systemName: "arrow.clockwise") }
+                        .buttonStyle(.borderless).foregroundStyle(.secondary).controlSize(.small)
+                        .help("Look for TVs again")
+                }
             }
             if model.selected.isEmpty, !model.lastGroupNames.isEmpty { lastGroupCard }
             Group {

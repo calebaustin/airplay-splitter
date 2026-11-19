@@ -13,12 +13,11 @@ final class Discovery: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
         browser.searchForServices(ofType: "_airplay._tcp.", inDomain: "local.")
     }
 
-    /// Looks again from scratch (the Refresh button).
+    /// Looks again (the Refresh button). The current list stays in place so
+    /// the menu doesn't jump; TVs that are gone drop off as Bonjour reports them.
     func restart() {
         browser.stop()
         pending.removeAll()
-        found.removeAll()
-        publish()
         start()
     }
 

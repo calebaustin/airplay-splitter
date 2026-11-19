@@ -26,6 +26,11 @@ right (with arrows) between pages:
 - Smart reconnect, connection memory with “Last time”, Refresh, Blank, keep the Mac awake, and an outline
   around a shared area.
 
+## Done in 0.4.0
+
+- Paged layout (TVs and Content), quick image, holding screen and countdown. The menu stays anchored to the
+  menu bar.
+
 ## Next: content sources (what sets this apart)
 
 These all plug into the same path the test pattern uses. The app draws frames and every selected TV gets
@@ -33,9 +38,6 @@ them, so every screen stays in sync by design.
 
 | Feature | Notes |
 |---|---|
-| **Quick image** | Drag an image onto the menu-bar icon or the Content page; it shows on the selected TVs. Announcements, instructions, holding slides. |
-| **Holding screen** | Logo, background and a line of text, saved as a reusable design. |
-| **Countdown** | 5, 10, 15 and 30 minute presets, plus a custom time. Identical on every TV because it's one stream. |
 | **Quick video** | Drop a video file and play it on the selected TVs with play, pause and loop. No presentation app needed. |
 | **Web page** | Enter a URL and show it full-screen. Dashboards, web slides, signage. |
 

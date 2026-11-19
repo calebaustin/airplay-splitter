@@ -11,7 +11,25 @@ final class SplitterModel: ObservableObject {
         case window                      // chosen with the system sharing picker
         case phones                      // iPhone/iPad mirroring to "AirPlay Splitter" (UxPlay)
         case testPattern                 // moving test card; needs no permission
+        case image                       // a still image (`imagePath`)
+        case holding                     // the holding screen (`holding`)
+        case countdown                   // a countdown to `countdownEnd`
     }
+
+    // MARK: content (drawn by the app, so no Screen Recording needed)
+
+    /// The image for `.image`, remembered between launches.
+    @Published private(set) var imagePath: String? = UserDefaults.standard.string(forKey: "imagePath")
+    /// Holding-screen and countdown design, remembered between launches.
+    @Published var holding = HoldingDesign.load() {
+        didSet {
+            holding.save()
+            if source == .holding || source == .countdown { restartCapture() }
+        }
+    }
+    /// When the countdown reaches zero.
+    @Published private(set) var countdownEnd: Date?
+    var isContent: Bool { [.image, .holding, .countdown].contains(source) }
 
     /// Whether the Mac's sound goes to the TVs. Off by default, so a room's
     /// own speakers don't double up; remembered between launches.
@@ -60,11 +78,14 @@ final class SplitterModel: ObservableObject {
         case .window: windowName ?? "A window"
         case .phones: "iPhone or iPad"
         case .testPattern: "Test pattern"
+        case .image: imagePath.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Image"
+        case .holding: "Holding screen"
+        case .countdown: "Countdown"
         }
     }
 
     /// Sound can come from the Mac (screen, region, window) or the phone.
-    var audioAvailable: Bool { source != .testPattern }
+    var audioAvailable: Bool { source != .testPattern && !isContent }
 
     var liveCount: Int { streams.values.filter { $0.state == "streaming" && selected.contains($0.device_ip) }.count }
 
@@ -82,6 +103,9 @@ final class SplitterModel: ObservableObject {
         case .window: "macwindow"
         case .phones: "iphone"
         case .testPattern: "square.grid.3x3.topleft.filled"
+        case .image: "photo"
+        case .holding: "rectangle.inset.filled"
+        case .countdown: "timer"
         }
     }
 
@@ -206,7 +230,14 @@ final class SplitterModel: ObservableObject {
         }
     }
 
-    func refreshTVs() { discovery.restart() }
+    /// True for a moment after Refresh, to show a spinner.
+    @Published private(set) var refreshing = false
+
+    func refreshTVs() {
+        discovery.restart()
+        refreshing = true
+        Task { try? await Task.sleep(for: .seconds(3)); refreshing = false }
+    }
 
     private func remember(_ tv: DaemonClient.Device, used: Bool) {
         let key = KnownTV.key(for: tv)
@@ -243,6 +274,8 @@ final class SplitterModel: ObservableObject {
         switch UserDefaults.standard.string(forKey: "source") {
         case "test": source = .testPattern
         case "phones": source = .phones
+        case "holding": source = .holding
+        case "image" where imagePath != nil: source = .image
         case let s? where s.hasPrefix("display:"):
             if let id = UInt32(s.dropFirst(8)), displays.contains(where: { $0.id == id }) { source = .display(id) }
         default: break
@@ -255,7 +288,9 @@ final class SplitterModel: ObservableObject {
         case .display(let id): "display:\(id)"
         case .testPattern: "test"
         case .phones: "phones"
-        case .region, .window: nil   // need choosing again each time
+        case .holding: "holding"
+        case .image: imagePath == nil ? nil : "image"
+        case .region, .window, .countdown: nil   // chosen or started fresh each time
         }
         if let value { UserDefaults.standard.set(value, forKey: "source") }
     }
@@ -413,6 +448,58 @@ final class SplitterModel: ObservableObject {
 
     func chooseDisplay(_ id: CGDirectDisplayID) { source = .display(id) }
     func chooseTestPattern() { source = .testPattern }
+
+    /// Shows an image on the TVs (from the Content page, a drop or Choose…).
+    func showImage(at url: URL) {
+        guard NSImage(contentsOf: url) != nil else { message = "That file isn't an image AirPlay Splitter can open."; return }
+        imagePath = url.path
+        UserDefaults.standard.set(url.path, forKey: "imagePath")
+        if source == .image { restartCapture() } else { source = .image }
+    }
+
+    func showImage() { if imagePath != nil { if source == .image { restartCapture() } else { source = .image } } }
+
+    func showHolding() { source = .holding }
+
+    func startCountdown(minutes: Int) {
+        countdownEnd = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        if source == .countdown { restartCapture() } else { source = .countdown }
+    }
+
+    func stopCountdown() {
+        countdownEnd = nil
+        if source == .countdown { source = .holding }
+    }
+
+    /// Frame source for the content modes. Still content is drawn once;
+    /// the countdown redraws only when the shown second changes.
+    private func contentFrames() -> ((Double) -> CVPixelBuffer?)? {
+        let design = holding
+        let logo = design.logoPath.flatMap { NSImage(contentsOfFile: $0) }
+        switch source {
+        case .image:
+            guard let path = imagePath, let img = NSImage(contentsOfFile: path),
+                  let pb = ContentRenderer.image(img) else { message = "Choose an image first."; return nil }
+            return { _ in pb }
+        case .holding:
+            guard let pb = ContentRenderer.holding(design, logo: logo) else { return nil }
+            return { _ in pb }
+        case .countdown:
+            let end = countdownEnd ?? Date()
+            var lastSecond = -1
+            var cached: CVPixelBuffer?
+            return { _ in
+                let remaining = end.timeIntervalSinceNow
+                let sec = max(0, Int(remaining.rounded(.up)))
+                if sec != lastSecond || cached == nil {
+                    lastSecond = sec
+                    cached = ContentRenderer.countdown(design, logo: logo, remaining: remaining)
+                }
+                return cached
+            }
+        default: return nil
+        }
+    }
     func choosePhones() { source = .phones }
 
     /// Drag out part of a screen. Keeps the current source if cancelled.
@@ -480,6 +567,10 @@ final class SplitterModel: ObservableObject {
         switch source {
         case .testPattern:
             do { try streamer.startTestPattern(); capturing = true }
+            catch { message = error.localizedDescription }
+        case .image, .holding, .countdown:
+            guard let frames = contentFrames() else { return }
+            do { try streamer.startGenerated(frames); capturing = true }
             catch { message = error.localizedDescription }
         case .phones:
             // UxPlay sends the phone's video (and sound, when on). Without
