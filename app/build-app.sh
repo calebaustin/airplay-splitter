@@ -37,7 +37,7 @@ APP="$STAGE/AirPlay Splitter.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
 cp "$HERE/.build/release/AirPlaySplitter" "$APP/Contents/MacOS/AirPlay Splitter"
 cp "$ROOT/vendor/doubletake-main/bin/doubletake" "$UXPLAY" "$APP/Contents/Resources/bin/"
-cp "$HERE/Icon/AppIcon.icns" "$APP/Contents/Resources/"
+cp "$HERE/Icon/AppIcon.icns" "$HERE/Icon/MenuBarIcon.pdf" "$APP/Contents/Resources/"
 cp "$ROOT/LICENSE" "$APP/Contents/Resources/LICENSE.txt"
 
 cat > "$APP/Contents/Info.plist" <<PLIST

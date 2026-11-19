@@ -27,6 +27,22 @@ church rooms and halls, where three or four screens need to show the same thing.
 
 Requires an Apple Silicon Mac with macOS 14 or later. The menu uses Liquid Glass on macOS 26.
 
+## Which Macs this is for
+
+AirPlay Splitter is built for **Apple Silicon Macs (M1, M2, M3, M4, M5 and later)**. The download is an
+`arm64` build, and it's only tested there. It won't run on Intel Macs as shipped.
+
+**Ports are welcome.** Nothing in the design is tied to Apple Silicon. Every part already exists for other
+processors, so a port is mostly build work:
+
+| Target | What a port involves |
+|---|---|
+| **Intel Macs** | Everything used here runs on Intel too: Swift, ScreenCaptureKit, VideoToolbox, Go, UxPlay and Homebrew's GStreamer (in `/usr/local` instead of `/opt/homebrew`). Build each piece for `x86_64` (`swift build --arch x86_64`, `GOARCH=amd64`, UxPlay with CMake on Intel). The bundler script uses `brew --prefix`, so it already follows Homebrew's location. Joining both builds with `lipo` would give one universal app. |
+| **Linux** | The sending engine, [doubletake](https://github.com/omarroth/doubletake), is a Linux program to begin with, and UxPlay runs there as well. The menu-bar app is Mac-only (SwiftUI and ScreenCaptureKit), so Linux would need its own small front end. doubletake already ships a KDE Plasma widget to start from. |
+| **Windows** | UxPlay runs on Windows, and [open-airplay](https://github.com/parsakhaz/open-airplay) has ported doubletake's protocol code there. Like Linux, it would need its own front end. |
+
+If you start a port, open an issue so others can find and help with it.
+
 ## How it works
 
 ```

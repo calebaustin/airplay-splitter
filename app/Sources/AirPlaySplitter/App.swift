@@ -1,5 +1,27 @@
 import SwiftUI
 
+/// Caleb's icon as a template image, so macOS tints it for the menu bar.
+/// Dimmed while nothing is being sent.
+struct MenuBarIcon: View {
+    let active: Bool
+    private static let image: NSImage? = {
+        guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "pdf"),
+              let img = NSImage(contentsOf: url) else { return nil }
+        img.isTemplate = true
+        let h: CGFloat = 16
+        img.size = NSSize(width: h * img.size.width / img.size.height, height: h)
+        return img
+    }()
+
+    var body: some View {
+        if let img = Self.image {
+            Image(nsImage: img).opacity(active ? 1 : 0.6)
+        } else {
+            Image(systemName: active ? "rectangle.on.rectangle.fill" : "rectangle.on.rectangle")
+        }
+    }
+}
+
 @main
 struct AirPlaySplitterApp: App {
     @StateObject private var model = SplitterModel()
@@ -59,7 +81,7 @@ struct AirPlaySplitterApp: App {
         MenuBarExtra {
             SplitterMenu(model: model)
         } label: {
-            Image(systemName: model.selected.isEmpty ? "rectangle.on.rectangle" : "rectangle.on.rectangle.fill")
+            MenuBarIcon(active: !model.selected.isEmpty)
         }
         .menuBarExtraStyle(.window)
     }
