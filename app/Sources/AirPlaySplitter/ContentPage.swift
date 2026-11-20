@@ -218,7 +218,7 @@ private struct HoldingCard: View {
                     }
                     if model.holding.logoPath != nil {
                         Button { model.holding.logoPath = nil } label: { Image(systemName: "xmark.circle.fill") }
-                            .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove the logo")
+                            .buttonStyle(.lift).help("Remove the logo")
                     }
                     Spacer()
                     Button("Show") { commit(); model.showHolding() }.buttonStyle(.borderedProminent)

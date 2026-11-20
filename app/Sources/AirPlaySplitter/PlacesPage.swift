@@ -68,7 +68,7 @@ private struct PlacesCard: View {
                     Spacer(minLength: 6)
                     Button("Connect") { model.connectPlace(p) }.controlSize(.small)
                     Button { model.deletePlace(p) } label: { Image(systemName: "trash") }
-                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove this place")
+                        .buttonStyle(.lift).help("Remove this place")
                 }
             }
             HStack(spacing: 6) {
@@ -112,9 +112,9 @@ private struct ScheduleCard: View {
                     }
                     Spacer(minLength: 6)
                     Toggle("On", isOn: Binding(get: { item.enabled }, set: { model.setSchedule(item, enabled: $0) }))
-                        .toggleStyle(.switch).labelsHidden().controlSize(.mini)
+                        .toggleStyle(.tactileBare)
                     Button { model.deleteSchedule(item) } label: { Image(systemName: "trash") }
-                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove")
+                        .buttonStyle(.lift).help("Remove")
                 }
             }
             Divider().opacity(0.4)

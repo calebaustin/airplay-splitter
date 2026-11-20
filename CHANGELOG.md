@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.2 · Unreleased
+
+### Fixed
+- Screen Recording permission now survives updates. Before, each new version looked like a different app to
+  macOS, so sharing your screen stopped working even though System Settings still showed the switch on.
+  After installing 0.6.2, remove AirPlay Splitter from Screen & System Audio Recording (−) and allow it once
+  more; future updates keep it.
+- The app notices a newly granted permission when you open the menu, instead of only at launch.
+
+### Changed
+- Swiping between TVs, Content and Places now slides the pages side by side under your fingers, like panels
+  already waiting to the right. No more fade or shrink; letting go settles on the nearest page.
+- The whole menu feels more alive, following the Modern UI Jumpstart rules:
+  - Switches feel physical: the knob stretches while held, springs across with a little overshoot, can be
+    dragged, and taps the trackpad when it flips.
+  - Swipes carry your finger's speed into the landing, stretch like a rubber band at the first and last page
+    (with a tap you can feel), and the page pill glides along as you swipe.
+  - One hover and press style for small buttons: a soft pill and a 1pt lift on hover, a quick sink on press.
+  - TV rows highlight under the pointer; a TV's status light gives one small pop when it changes.
+  - Nothing animates while the menu sits idle, and Reduce Motion calms all of it.
+- Local builds install to /Applications (one copy only), so Finder and Launchpad always open the latest.
+
 ## 0.6.1 · November 19, 2026
 
 ### Fixed

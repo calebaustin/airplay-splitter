@@ -1,7 +1,7 @@
 #!/bin/zsh
-# Builds AirPlay Splitter.app, installs it to ~/Applications, and optionally a DMG.
+# Builds AirPlay Splitter.app, installs it to /Applications, and optionally a DMG.
 #
-#   app/build-app.sh            build + install to ~/Applications
+#   app/build-app.sh            build + install to /Applications
 #   app/build-app.sh --dmg      also write dist/AirPlay-Splitter-<version>.dmg
 #
 # Signing: uses SIGN_IDENTITY if set (e.g. "Developer ID Application: Name (TEAMID)"),
@@ -73,18 +73,37 @@ python3 "$ROOT/scripts/bundle_gstreamer.py" "$APP"
 xattr -cr "$APP"
 find "$APP/Contents/Resources/gst" -type f \( -name '*.dylib' -o -perm +111 \) -print0 |
   while IFS= read -r -d '' f; do codesign "${SIGN_OPTS[@]}" "$f"; done
-codesign "${SIGN_OPTS[@]}" -i local.airplaysplitter.engine "$ENGINE"
-codesign "${SIGN_OPTS[@]}" -i local.airplaysplitter.receiver "$RECEIVER"
-codesign "${SIGN_OPTS[@]}" "$APP"
+# Ad-hoc signatures normally pin macOS permissions (Screen Recording, Local
+# Network) to this exact build's hash, so every update silently loses them
+# while System Settings still shows the switch on. Naming the requirement by
+# bundle identifier keeps the grant across builds. A real Developer ID
+# signature already does this on its own.
+req() { [[ "$IDENTITY" == "-" ]] && echo "-r=designated => identifier \"$1\""; }
+sign_as() { local id=$1 target=$2; local r; r=$(req "$id")
+  if [[ -n "$r" ]]; then codesign "${SIGN_OPTS[@]}" -i "$id" "$r" "$target"
+  else codesign "${SIGN_OPTS[@]}" -i "$id" "$target"; fi; }
+sign_as local.airplaysplitter.engine "$ENGINE"
+sign_as local.airplaysplitter.receiver "$RECEIVER"
+sign_as local.airplaysplitter "$APP"
 codesign --verify --deep --strict "$APP"
 
-# 4. Install locally.
-DEST="$HOME/Applications/AirPlay Splitter.app"
-mkdir -p "$HOME/Applications"
+# 4. Install locally, to /Applications where Finder and Launchpad look (or
+# ~/Applications if that isn't writable). Only one copy is kept, so Spotlight
+# never opens a stale build. NO_INSTALL=1 skips this (e.g. mid-test).
+if [[ -z "${NO_INSTALL:-}" ]]; then
+if [[ -w /Applications ]]; then
+  DEST="/Applications/AirPlay Splitter.app"
+  OLD="$HOME/Applications/AirPlay Splitter.app"
+else
+  DEST="$HOME/Applications/AirPlay Splitter.app"; OLD=""
+  mkdir -p "$HOME/Applications"
+fi
 osascript -e 'quit app "AirPlay Splitter"' >/dev/null 2>&1 || true
 [[ -d "$DEST" ]] && rm -r "$DEST"
+[[ -n "$OLD" && -d "$OLD" ]] && rm -r "$OLD"
 ditto "$APP" "$DEST"
 echo "Installed: $DEST"
+fi
 
 # 5. DMG: the app plus an Applications shortcut to drag it onto.
 if (( MAKE_DMG )); then

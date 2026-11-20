@@ -62,9 +62,16 @@ final class SplitterModel: ObservableObject {
     private let regionSelector = RegionSelector()
     private var pickerObserver: PickerObserver?
 
-    /// Screen Recording permission. macOS only applies a new grant after the
-    /// app restarts, so this is read once at launch.
+    /// Screen Recording permission. Read at launch and checked again whenever
+    /// the menu opens or sharing starts, so a grant made while the app is
+    /// running is noticed without guessing.
     @Published var hasScreenAccess = CGPreflightScreenCaptureAccess()
+
+    func refreshScreenAccess() {
+        guard !isPreview else { return }
+        let now = CGPreflightScreenCaptureAccess()
+        if now != hasScreenAccess { hasScreenAccess = now }
+    }
 
     /// doubletake runs gst-launch-1.0 from Homebrew; others installing the
     /// DMG may not have it yet.
@@ -667,6 +674,7 @@ final class SplitterModel: ObservableObject {
                 try await s.start(filter: filter, contentSize: filter.contentRect.size, captureAudio: self.sendAudio)
             }
         case .display(let id), .region(let id):
+            refreshScreenAccess()
             guard hasScreenAccess else {
                 message = "Screen Recording permission is needed to show this screen. Use Open Settings, then Relaunch."
                 return

@@ -124,7 +124,7 @@ doubletake targets Linux. This copy adds, in a few hundred lines:
 
 ```bash
 scripts/bootstrap.sh        # once: Homebrew packages, UxPlay submodule and build
-app/build-app.sh            # build and install to ~/Applications
+app/build-app.sh            # build and install to /Applications
 app/build-app.sh --dmg      # also write dist/AirPlay-Splitter-<version>.dmg
 ```
 
