@@ -24,7 +24,14 @@ private struct PageCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: symbol).font(.callout.weight(.semibold))
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.primary.opacity(0.75))
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.primary.opacity(0.1)))
+                Text(title).font(.system(size: 12, weight: .semibold))
+            }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -36,8 +43,7 @@ private struct PageCard<Content: View>: View {
 private struct PageGlass: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous)
-        if #available(macOS 26.0, *) { content.glassEffect(.regular, in: shape) }
-        else { content.background(.regularMaterial, in: shape) }
+        content.tileGlass(shape)
     }
 }
 

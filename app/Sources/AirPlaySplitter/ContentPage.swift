@@ -26,7 +26,7 @@ struct ContentPage: View {
             HoldingCard(model: model)
             CountdownCard(model: model)
         }
-        if #available(macOS 26.0, *) { GlassEffectContainer(spacing: Tokens.gap) { stack } } else { stack }
+        if #available(macOS 26.0, *) { GlassEffectContainer(spacing: 0) { stack } } else { stack }
     }
 }
 
@@ -40,8 +40,14 @@ private struct Card<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: symbol).foregroundStyle(.secondary)
-                Text(title).font(.callout.weight(.semibold))
+                // Control Center style: a small round icon that lights up when live.
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(live ? Color.white : Color.primary.opacity(0.75))
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(live ? AnyShapeStyle(Tokens.live) : AnyShapeStyle(Color.primary.opacity(0.1))))
+                    .animation(Motion.bouncy, value: live)
+                Text(title).font(.system(size: 12, weight: .semibold))
                 Spacer()
                 if live {
                     Label("Showing", systemImage: "dot.radiowaves.left.and.right")
@@ -59,10 +65,7 @@ private struct CardGlass: ViewModifier {
     let live: Bool
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous)
-        Group {
-            if #available(macOS 26.0, *) { content.glassEffect(.regular, in: shape) }
-            else { content.background(.regularMaterial, in: shape) }
-        }
+        content.tileGlass(shape)
         .overlay(shape.strokeBorder(Tokens.live.opacity(live ? 0.7 : 0), lineWidth: 1.5))
     }
 }
@@ -327,6 +330,7 @@ private func openPanel(types: [UTType]) -> URL? {
     p.allowedContentTypes = types
     p.allowsMultipleSelection = false
     p.canChooseDirectories = false
+    MenuPanelController.hideMenu()
     NSApp.activate(ignoringOtherApps: true)
     return p.runModal() == .OK ? p.url : nil
 }

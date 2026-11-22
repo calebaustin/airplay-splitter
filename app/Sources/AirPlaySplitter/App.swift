@@ -1,11 +1,14 @@
 import SwiftUI
 import CoreImage
+import ScreenCaptureKit
 
 /// Caleb's icon as a template image, so macOS tints it for the menu bar.
 /// Dimmed while nothing is being sent.
 struct MenuBarIcon: View {
     let active: Bool
     var badge = false
+    /// The status item's image (template, so macOS tints it).
+    static var templateImage: NSImage? { image }
     private static let image: NSImage? = {
         guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "pdf"),
               let img = NSImage(contentsOf: url) else { return nil }
@@ -27,9 +30,65 @@ struct MenuBarIcon: View {
     }
 }
 
+/// Owns the model and the menu bar panel for the life of the app.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var model: SplitterModel?
+    private var menu: MenuPanelController?
+    func applicationDidFinishLaunching(_ note: Notification) {
+        let m = SplitterModel()
+        model = m
+        menu = MenuPanelController(model: m)
+        // Developer check: `--selftest-extended out.txt` adds the virtual
+        // screen, captures one frame of it and writes what it found.
+        if let j = CommandLine.arguments.firstIndex(of: "--selftest-extended"), j + 1 < CommandLine.arguments.count {
+            let out = CommandLine.arguments[j + 1]
+            Task { @MainActor in
+                var log = ""
+                let v = VirtualScreen()
+                let ok = await v.start()
+                log += "online=\(ok) id=\(v.displayID.map(String.init) ?? "nil") serial=\(UserDefaults.standard.integer(forKey: "virtualScreenSerial"))\n"
+                for t in 0..<2 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    var ids = [CGDirectDisplayID](repeating: 0, count: 16); var n: UInt32 = 0
+                    CGGetOnlineDisplayList(16, &ids, &n)
+                    let sck = (try? await ScreenStreamer.displays().map(\.displayID)) ?? []
+                    let me = v.displayID ?? 0
+                    log += "t=\(t) on=\(v.isOn) online=\(ids.prefix(Int(n))) sck=\(sck) isOnline=\(CGDisplayIsOnline(me)) active=\(CGDisplayIsActive(me)) asleep=\(CGDisplayIsAsleep(me)) mirror=\(CGDisplayIsInMirrorSet(me)) px=\(CGDisplayPixelsWide(me))x\(CGDisplayPixelsHigh(me))\n"
+                }
+                for s in NSScreen.screens {
+                    let num = (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue ?? -1
+                    log += "screen \(num) \(s.localizedName) \(Int(s.frame.width))x\(Int(s.frame.height))\n"
+                }
+                if let id = v.displayID, let d = try? await ScreenStreamer.displays().first(where: { $0.displayID == id }) {
+                    let cfg = SCStreamConfiguration(); cfg.width = d.width; cfg.height = d.height
+                    if let img = try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(display: d, excludingWindows: []), configuration: cfg) {
+                        log += "captured \(img.width)x\(img.height)\n"
+                    } else { log += "capture failed\n" }
+                } else { log += "not visible to ScreenCaptureKit\n" }
+                v.remove()
+                try? log.write(toFile: out, atomically: true, encoding: .utf8)
+                exit(0)
+            }
+        }
+        // Developer check: `--open-menu` opens the panel at launch.
+        if CommandLine.arguments.contains("--open-menu") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.menu?.show() }
+            // `--open-menu --snap file.png [--page n]` also saves a screenshot.
+            let a = CommandLine.arguments
+            if let j = a.firstIndex(of: "--page"), j + 1 < a.count, let n = Int(a[j + 1]) { SplitterMenu.lastPage = n }
+            if let j = a.firstIndex(of: "--snap"), j + 1 < a.count {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                    Task { @MainActor in await self?.menu?.snapshot(to: a[j + 1]) }
+                }
+            }
+        }
+    }
+}
+
 @main
 struct AirPlaySplitterApp: App {
-    @StateObject private var model = SplitterModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     init() {
         // Developer check: `AirPlay Splitter --rtp-selftest` streams the test
@@ -143,9 +202,15 @@ struct AirPlaySplitterApp: App {
         host.frame = CGRect(origin: .zero, size: size)
         let win = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         win.appearance = NSAppearance(named: CommandLine.arguments.contains("--dark") ? .darkAqua : .aqua)
-        let effect = NSVisualEffectView(frame: host.frame)
-        effect.material = .popover
-        effect.state = .active
+        // No menu background any more: draw the tiles over a desktop-like backdrop.
+        let effect = NSView(frame: host.frame)
+        effect.wantsLayer = true
+        let g = CAGradientLayer()
+        g.frame = host.frame
+        g.colors = CommandLine.arguments.contains("--dark")
+            ? [NSColor(red: 0.10, green: 0.13, blue: 0.22, alpha: 1).cgColor, NSColor(red: 0.28, green: 0.20, blue: 0.30, alpha: 1).cgColor]
+            : [NSColor(red: 0.62, green: 0.74, blue: 0.86, alpha: 1).cgColor, NSColor(red: 0.86, green: 0.78, blue: 0.70, alpha: 1).cgColor]
+        effect.layer?.addSublayer(g)
         effect.addSubview(host)
         win.contentView = effect
         win.setFrameOrigin(CGPoint(x: -10_000, y: -10_000))
@@ -157,11 +222,9 @@ struct AirPlaySplitterApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra {
-            SplitterMenu(model: model)
-        } label: {
-            MenuBarIcon(active: !model.selected.isEmpty, badge: model.update != nil)
-        }
-        .menuBarExtraStyle(.window)
+        // The menu lives in our own transparent panel (MenuPanel.swift). SwiftUI
+        // still needs a scene; an empty Settings scene opened a blank
+        // "Settings" window at launch, so this one is never put in the menu bar.
+        MenuBarExtra("AirPlay Splitter", isInserted: .constant(false)) { EmptyView() }
     }
 }

@@ -7,6 +7,7 @@ import Combine
 final class SplitterModel: ObservableObject {
     enum Source: Hashable {
         case display(CGDirectDisplayID)
+        case extended                    // a 1920×1080 virtual second screen (VirtualScreen)
         case region(CGDirectDisplayID)   // part of a display; rect in `region`
         case window                      // chosen with the system sharing picker
         case phones                      // iPhone/iPad mirroring to "AirPlay Splitter" (UxPlay)
@@ -81,7 +82,7 @@ final class SplitterModel: ObservableObject {
 
     var needsScreenAccess: Bool {
         switch source {
-        case .display, .region: return !hasScreenAccess
+        case .display, .region, .extended: return !hasScreenAccess
         default: return false   // the window picker grants its own access
         }
     }
@@ -92,6 +93,7 @@ final class SplitterModel: ObservableObject {
         case .region(let id):
             "Part of \(displays.first { $0.id == id }?.name.components(separatedBy: " (").first ?? "screen")"
         case .window: windowName ?? "A window"
+        case .extended: "Extended Screen (1920×1080)"
         case .phones: "iPhone or iPad"
         case .testPattern: "Test pattern"
         case .image: imagePath.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Image"
@@ -117,6 +119,7 @@ final class SplitterModel: ObservableObject {
     var sourceSymbol: String {
         switch source {
         case .display: "display"
+        case .extended: "rectangle.on.rectangle"
         case .region: "rectangle.dashed"
         case .window: "macwindow"
         case .phones: "iphone"
@@ -306,6 +309,7 @@ final class SplitterModel: ObservableObject {
         switch UserDefaults.standard.string(forKey: "source") {
         case "test": source = .testPattern
         case "phones": source = .phones
+        case "extended": chooseExtendedScreen()
         case "holding": source = .holding
         case "image" where imagePath != nil: source = .image
         case let s? where s.hasPrefix("display:"):
@@ -318,6 +322,7 @@ final class SplitterModel: ObservableObject {
         guard !isPreview else { return }
         let value: String? = switch source {
         case .display(let id): "display:\(id)"
+        case .extended: "extended"
         case .testPattern: "test"
         case .phones: "phones"
         case .holding: "holding"
@@ -373,7 +378,8 @@ final class SplitterModel: ObservableObject {
     /// (asking ScreenCaptureKit here re-triggered the permission prompt).
     func loadDisplays() async {
         displays = NSScreen.screens.compactMap { s in
-            guard let n = s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return nil }
+            guard let n = s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
+                  n.uint32Value != extendedScreen.displayID else { return nil }
             let size = s.frame.size
             return DisplayChoice(id: n.uint32Value, name: "\(s.localizedName) (\(Int(size.width))×\(Int(size.height)))")
         }
@@ -479,6 +485,24 @@ final class SplitterModel: ObservableObject {
     // MARK: choosing what to show
 
     func chooseDisplay(_ id: CGDirectDisplayID) { source = .display(id) }
+
+    /// The virtual 1920×1080 second screen, while it's the source.
+    let extendedScreen = VirtualScreen()
+
+    /// Adds a 1920×1080 screen to the Mac (like plugging in a TV) and sends
+    /// that to the TVs: drag slides, ProPresenter or a browser onto it while
+    /// your own screen stays private. Exactly TV-shaped, so no black bars.
+    func chooseExtendedScreen() {
+        if isPreview { source = .extended; return }
+        Task {
+            guard await extendedScreen.start() else {
+                message = "macOS didn't bring the extended screen online. Try again, or pick a Screen from the list."
+                return
+            }
+            await loadDisplays()
+            if source == .extended { restartCapture() } else { source = .extended }
+        }
+    }
     func chooseTestPattern() { source = .testPattern }
 
     /// Shows an image on the TVs (from the Content page, a drop or Choose…).
@@ -590,6 +614,7 @@ final class SplitterModel: ObservableObject {
 
     /// Drag out part of a screen. Keeps the current source if cancelled.
     func chooseRegion(on id: CGDirectDisplayID) {
+        MenuPanelController.hideMenu()
         guard let screen = NSScreen.screens.first(where: {
             ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == id
         }) else { return }
@@ -602,6 +627,7 @@ final class SplitterModel: ObservableObject {
 
     /// Opens macOS's own window picker (the one FaceTime and Zoom use).
     func chooseWindow() {
+        MenuPanelController.hideMenu()
         let picker = SCContentSharingPicker.shared
         if pickerObserver == nil {
             let o = PickerObserver { [weak self] filter in
@@ -633,6 +659,7 @@ final class SplitterModel: ObservableObject {
         if source == .phones { blanked = false }   // phone video bypasses the app
         if old == .video, source != .video { video.pause() }
         if old == .web, source != .web { web.stop() }
+        if old == .extended, source != .extended { extendedScreen.remove() }
         preview = nil
         saveSource()
         updateOutline()
@@ -672,6 +699,27 @@ final class SplitterModel: ObservableObject {
             guard let filter = windowFilter else { chooseWindow(); return }
             capture { s in
                 try await s.start(filter: filter, contentSize: filter.contentRect.size, captureAudio: self.sendAudio)
+            }
+        case .extended:
+            refreshScreenAccess()
+            guard hasScreenAccess else {
+                message = "Screen Recording permission is needed to show the extended screen. Use Open Settings, then Relaunch."
+                return
+            }
+            let screen = extendedScreen
+            capture { s in
+                guard await screen.start(), let id = screen.displayID else {
+                    throw NSError(domain: "AirPlaySplitter", code: 1, userInfo: [NSLocalizedDescriptionKey: "macOS didn't bring the extended screen online."])
+                }
+                // A new screen takes a moment to show up for capture.
+                var found: SCDisplay?
+                for _ in 0..<20 {
+                    found = try await ScreenStreamer.displays().first { $0.displayID == id }
+                    if found != nil { break }
+                    try await Task.sleep(nanoseconds: 150_000_000)
+                }
+                guard let d = found else { throw NSError(domain: "AirPlaySplitter", code: 1, userInfo: [NSLocalizedDescriptionKey: "The extended screen didn't appear."]) }
+                try await s.start(display: d, sourceRect: nil, captureAudio: self.sendAudio)
             }
         case .display(let id), .region(let id):
             refreshScreenAccess()

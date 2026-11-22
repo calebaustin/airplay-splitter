@@ -38,6 +38,9 @@ something onto every screen.
   shows a PIN; type it into the box that opens right under that TV. It's remembered after that.
 - **Choose what to show.** A whole screen, **one window** (with Apple's own window picker), **an area you drag
   out**, an **iPhone or iPad**, or a **test pattern**.
+- **Extend, don't just mirror.** **Extended Screen** adds a 1920×1080 second screen to your Mac, exactly
+  TV-shaped. Drag slides, ProPresenter or a browser onto it and every TV shows it, while your own screen stays
+  private. (It uses the same macOS virtual-screen feature as display tools like BetterDisplay and DeskPad.)
 - **Sound on or off.** One switch sends the Mac's audio to the TVs too. It's off by default so a room's own
   speakers don't double up.
 - **Put content up without your screen.** The **Content** page shows an image or video you drop in, a web

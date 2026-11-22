@@ -2,15 +2,16 @@ import SwiftUI
 
 // Design tokens. Views read these, never raw values.
 enum Tokens {
-    static let radius: CGFloat = 14
+    // Control Center proportions: rounded tiles, tight even spacing.
+    static let radius: CGFloat = 22
     static let rowRadius: CGFloat = 10
-    static let gap: CGFloat = 12
-    static let pad: CGFloat = 14
+    static let gap: CGFloat = 10
+    static let pad: CGFloat = 10
     static let width: CGFloat = 340
-    static let rowHeight: CGFloat = 40   // one TV row (34pt content + divider)
+    static let rowHeight: CGFloat = 45   // one TV row (44pt with its icon circle, + divider)
     static let pinHeight: CGFloat = 62   // the PIN box under a row
-    /// Tallest a scrolling page may be (about 45% of the screen).
-    @MainActor static var pageCap: CGFloat { max(300, (NSScreen.main?.visibleFrame.height ?? 800) * 0.45) }
+    /// Tallest a scrolling page may be (about 40% of the screen).
+    @MainActor static var pageCap: CGFloat { max(300, (NSScreen.main?.visibleFrame.height ?? 800) * 0.4) }
     /// Tallest the whole menu may be: the screen below the menu bar, minus a margin.
     @MainActor static var menuCap: CGFloat { (NSScreen.main?.visibleFrame.height ?? 800) - 16 }
     static let live = Color.green
@@ -19,24 +20,13 @@ enum Tokens {
 }
 
 /// Liquid Glass on macOS 26, frosted material before that.
-private struct Glass<S: Shape>: ViewModifier {
-    let shape: S
-    var interactive = false
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
-        } else {
-            content.background(.regularMaterial, in: shape)
-        }
-    }
-}
-
 private extension View {
-    func glass<S: Shape>(_ shape: S, interactive: Bool = false) -> some View {
-        modifier(Glass(shape: shape, interactive: interactive))
+    func glass<S: InsettableShape>(_ shape: S, interactive: Bool = false) -> some View {
+        tileGlass(shape, interactive: interactive)
     }
     @ViewBuilder func glassGroup() -> some View {
-        if #available(macOS 26.0, *) { GlassEffectContainer(spacing: Tokens.gap) { self } } else { self }
+        // Spacing 0: tiles stay separate pieces of glass instead of melting together.
+        if #available(macOS 26.0, *) { GlassEffectContainer(spacing: 0) { self } } else { self }
     }
 }
 
@@ -52,7 +42,11 @@ struct SplitterMenu: View {
     /// Edge bump already felt during this swipe (one tap per edge).
     @State private var edgeFelt = false
     @Namespace private var pill
+    /// Tiles settle in one after another each time the menu opens.
+    @State private var shown = false
     private let pages = ["TVs", "Content", "Places"]
+    /// The page to reopen on.
+    @MainActor static var lastPage = 0
 
     init(model: SplitterModel, page: Int = 0) {
         self.model = model
@@ -61,10 +55,11 @@ struct SplitterMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.gap) {
-            header
+            header.settleIn(0, shown: shown)
             if let u = model.update { updateCard(u) }
             if model.gstreamerMissing { gstreamerNotice }
-            sourceSection
+            sourceSection.settleIn(1, shown: shown)
+            controls.settleIn(2, shown: shown)
             if model.needsScreenAccess { accessNotice }
             // TVs / Content: swipe sideways with two fingers anywhere here;
             // the arrows and page names are there too, but optional.
@@ -84,23 +79,20 @@ struct SplitterMenu: View {
                 // keeps the neighbouring pages fully out of sight.
                 .mask(Rectangle())
             }
+            .settleIn(3, shown: shown)
             .background(HorizontalSwipe(
                 onDrag: { dx in sliding = true; drag = resisted(dx) },
                 onEnd: { settle(distance: $0, velocity: $1) },
                 onStep: { turn(to: page + $0) }))
-            if let msg = model.message { messageRow(msg) }
-            footer
+            if let msg = model.message { messageRow(msg).padding(10).tile() }
         }
         .padding(Tokens.pad)
         .frame(width: Tokens.width)
         .frame(maxHeight: Tokens.menuCap)   // never taller than the screen
         .glassGroup()
-        // Always hang from the menu bar, sized to fit: refit whenever something
-        // that changes the menu's height changes.
-        .background(MenuAnchor())
         .task { await model.loadDisplays() }
-        .onAppear { model.previewVisible = true; model.refreshScreenAccess() }
-        .onDisappear { model.previewVisible = false }
+        .onAppear { model.refreshScreenAccess(); shown = true }
+        .onChange(of: page) { _, p in Self.lastPage = p }
     }
 
     // MARK: header
@@ -108,18 +100,27 @@ struct SplitterMenu: View {
     private var header: some View {
         HStack(spacing: 10) {
             MenuBarIcon(active: true)
-                .foregroundStyle(model.liveCount > 0 ? Tokens.live : .secondary)
+                .foregroundStyle(model.liveCount > 0 ? Tokens.live : .primary)
                 .animation(Motion.fade, value: model.liveCount > 0)
-                .frame(width: 30, height: 30)
-                .glass(Circle())
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(Color.primary.opacity(0.12)))
             VStack(alignment: .leading, spacing: 1) {
-                Text("AirPlay Splitter").font(.headline)
+                Text("AirPlay Splitter").font(.system(size: 13, weight: .semibold))
                 Text(model.summary).font(.caption).foregroundStyle(.secondary)
                     .contentTransition(.numericText())
                     .animation(Motion.snappy, value: model.summary)
             }
             Spacer()
+            Button { NSApp.terminate(nil) } label: {
+                Image(systemName: "power").font(.system(size: 12, weight: .semibold))
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(Color.primary.opacity(0.1)))
+            }
+            .buttonStyle(PagePillButton())
+            .help("Quit AirPlay Splitter")
         }
+        .padding(.vertical, 8).padding(.leading, 8).padding(.trailing, 10)
+        .glass(Capsule())
     }
 
     // MARK: update
@@ -152,27 +153,27 @@ struct SplitterMenu: View {
 
     private var sourceSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("Show")
-            HStack(spacing: 10) {
+            // Like Control Center's Now Playing: what's going out, big and clear.
+            HStack(spacing: 12) {
                 previewThumb
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
+                    TileLabel(model.selected.isEmpty ? "Ready to show" : "Now showing")
                     sourceMenu
-                    Toggle(isOn: $model.sendAudio) {
-                        Label("Sound", systemImage: model.sendAudio ? "speaker.wave.2.fill" : "speaker.slash")
-                            .font(.callout)
-                    }
-                    .toggleStyle(.tactile)
-                    .disabled(!model.audioAvailable)
-                    .help("Send this Mac's sound to the TVs too")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .overlay(alignment: .bottom) { EmptyView() }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if model.source == .phones {
+                    Text("On the iPhone or iPad, open Control Center, tap Screen Mirroring, and choose “AirPlay Splitter”.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding([.horizontal, .bottom], 12)
                 }
             }
-            .padding(8)
             .glass(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
-            if model.source == .phones {
-                Text("On the iPhone or iPad, open Control Center, tap Screen Mirroring, and choose “AirPlay Splitter”.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 
@@ -188,7 +189,7 @@ struct SplitterMenu: View {
                 Image(systemName: model.sourceSymbol).font(.title2).foregroundStyle(.secondary)
             }
         }
-        .frame(width: 112, height: 63)
+        .frame(width: 104, height: 58.5)
         .clipShape(RoundedRectangle(cornerRadius: Tokens.rowRadius, style: .continuous))
         .animation(Motion.fade, value: model.preview == nil || model.selected.isEmpty)
         .accessibilityLabel("Preview of what's being sent")
@@ -201,6 +202,11 @@ struct SplitterMenu: View {
                     Button { model.chooseDisplay(d.id) } label: {
                         Label(d.name, systemImage: model.source == .display(d.id) ? "checkmark" : "display")
                     }
+                }
+            }
+            Section("Second screen") {
+                Button { model.chooseExtendedScreen() } label: {
+                    Label("Extended Screen (1920×1080)", systemImage: model.source == .extended ? "checkmark" : "rectangle.on.rectangle")
                 }
             }
             Section("Part of the screen") {
@@ -338,14 +344,22 @@ struct SplitterMenu: View {
         .buttonStyle(.lift)
         .controlSize(.small)
         .animation(Motion.bouncy, value: shownPage)
+        .padding(5)
+        .glass(Capsule())
     }
 
     // MARK: receivers
 
     private var receiversSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Tokens.gap) {
+            if model.selected.isEmpty, let place = model.suggestedPlace {
+                placeCard(place)
+            } else if model.selected.isEmpty, !model.lastGroupNames.isEmpty {
+                lastGroupCard
+            }
+            VStack(alignment: .leading, spacing: 2) {
             HStack {
-                sectionLabel("Send to")
+                TileLabel("Send to")
                 Spacer()
                 if model.refreshing {
                     ProgressView().controlSize(.mini)
@@ -355,12 +369,7 @@ struct SplitterMenu: View {
                         .help("Look for TVs again")
                 }
             }
-            if model.selected.isEmpty, let place = model.suggestedPlace {
-                placeCard(place)
-            } else if model.selected.isEmpty, !model.lastGroupNames.isEmpty {
-                lastGroupCard
-            }
-            Group {
+            .padding(.leading, 14).padding(.trailing, 8).padding(.top, 10)
                 if model.tvs.isEmpty {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
@@ -376,7 +385,7 @@ struct SplitterMenu: View {
                         ScrollView(.vertical) {
                             LazyVStack(spacing: 0) {
                                 ForEach(Array(orderedTVs.enumerated()), id: \.element.id) { i, tv in
-                                    if i > 0 { Rectangle().fill(Color.primary.opacity(0.1)).frame(height: 1).padding(.leading, 44) }
+                                    if i > 0 { Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1).padding(.leading, 48) }
                                     ReceiverRow(model: model, tv: tv).id(tv.id)
                                 }
                             }
@@ -388,12 +397,13 @@ struct SplitterMenu: View {
                         }
                     }
                 }
-            }
-            .glass(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
             if model.tvs.count > visibleRows {
                 Text("\(model.tvs.count) TVs found. Scroll for more.")
-                    .font(.caption2).foregroundStyle(.tertiary).padding(.leading, 4)
+                    .font(.caption2).foregroundStyle(.secondary).padding(.leading, 14).padding(.bottom, 8)
             }
+            }
+            .padding(.bottom, 4)
+            .glass(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
         }
     }
 
@@ -409,7 +419,7 @@ struct SplitterMenu: View {
     /// Rows that fit: about 45% of the screen, between 4 and 7 rows.
     private var visibleRows: Int {
         let screen = NSScreen.main?.visibleFrame.height ?? 800
-        return max(4, min(7, Int(screen * 0.45 / Tokens.rowHeight)))
+        return max(4, min(7, Int(screen * 0.4 / Tokens.rowHeight)))
     }
 
     private var listHeight: CGFloat {
@@ -499,28 +509,27 @@ struct SplitterMenu: View {
         .font(.caption)
     }
 
-    // MARK: footer
+    // MARK: controls
 
-    private var footer: some View {
-        HStack {
-            Button("Stop All") { model.stopAll() }
-                .disabled(model.selected.isEmpty)
-            Spacer()
-            Toggle(isOn: $model.blanked) {
-                Label(model.blanked ? "Unblank" : "Blank", systemImage: model.blanked ? "eye" : "eye.slash")
-            }
-            .toggleStyle(.button)
-            .disabled(model.selected.isEmpty || model.source == .phones)
-            .help("Show black on every TV without disconnecting")
-            Spacer()
-            Button("Quit") { NSApp.terminate(nil) }
+    /// Like Control Center's AirDrop row: a wide Sound tile, then round
+    /// Blank and Stop All buttons. They turn white (or color) when on.
+    private var controls: some View {
+        HStack(spacing: Tokens.gap) {
+            WideToggleTile(symbol: model.sendAudio ? "speaker.wave.2.fill" : "speaker.slash.fill",
+                           title: "Sound", detail: model.sendAudio ? "On the TVs" : "Off",
+                           on: model.sendAudio, enabled: model.audioAvailable,
+                           help: "Send this Mac's sound to the TVs too") { model.sendAudio.toggle() }
+            RoundTile(symbol: model.blanked ? "eye.slash.fill" : "eye.fill", on: model.blanked, tint: .indigo,
+                      enabled: !model.selected.isEmpty && model.source != .phones,
+                      label: model.blanked ? "Unblank the TVs" : "Blank the TVs (show black without disconnecting)") { model.blanked.toggle() }
+            RoundTile(symbol: "stop.fill", on: false, tint: .red,
+                      enabled: !model.selected.isEmpty,
+                      label: "Stop showing on every TV") { model.stopAll() }
         }
-        .controlSize(.regular)
-        .modifier(GlassButtons())
     }
 
     private func sectionLabel(_ s: String) -> some View {
-        Text(s).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.leading, 4)
+        TileLabel(s).padding(.leading, 4)
     }
 }
 
@@ -545,10 +554,7 @@ struct ReceiverRow: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: symbol)
-                    .font(.system(size: 14))
-                    .foregroundStyle(model.selected.contains(tv.ip) ? Color.accentColor : .secondary)
-                    .frame(width: 24)
+                OrbIcon(symbol: symbol, on: model.selected.contains(tv.ip), size: 28)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tv.name).lineLimit(1).truncationMode(.tail)
                         .foregroundStyle(model.missing.contains(tv.ip) && !model.selected.contains(tv.ip) ? .secondary : .primary)
@@ -593,7 +599,7 @@ struct ReceiverRow: View {
             }
             .controlSize(.small)
         }
-        .padding(.leading, 44).padding(.trailing, 10).padding(.bottom, 10)
+        .padding(.leading, 48).padding(.trailing, 10).padding(.bottom, 10)
         .onAppear { pinFocused = true }
     }
 
@@ -655,4 +661,122 @@ private struct StatusDot: View {
             }
             .animation(Motion.fade, value: color)
     }
+}
+
+/// Small uppercase heading used on every tile (Control Center style).
+struct TileLabel: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .bold))
+            .tracking(0.6)
+            .foregroundStyle(.secondary)
+    }
+}
+
+/// A wide Control Center module: round icon, name and state; the whole
+/// tile is the button.
+private struct WideToggleTile: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    let on: Bool
+    var enabled = true
+    var help = ""
+    let action: () -> Void
+
+    var body: some View {
+        Button { action(); Haptics.tick() } label: {
+            HStack(spacing: 10) {
+                OrbIcon(symbol: symbol, on: on, size: 38)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    Text(detail).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                        .contentTransition(.opacity)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: Self.height)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(TileButton(shape: AnyShape(Capsule())))
+        .disabled(!enabled)
+        .help(help)
+        .animation(Motion.bouncy, value: on)
+        .tileGlass(Capsule(), interactive: true)
+    }
+    static let height: CGFloat = 58
+}
+
+/// A round Control Center button with just an icon.
+private struct RoundTile: View {
+    let symbol: String
+    let on: Bool
+    var tint: Color = .accentColor
+    var enabled = true
+    let label: String
+    let action: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let dark = scheme == .dark
+        Button { action(); Haptics.tick() } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .semibold))
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(on ? (dark ? tint : .white) : .primary)
+                .frame(width: WideToggleTile.height, height: WideToggleTile.height)
+                .background(Circle().fill(on ? (dark ? Color.white : tint) : Color.clear))
+                .contentShape(Circle())
+        }
+        .buttonStyle(TileButton(shape: AnyShape(Circle())))
+        .disabled(!enabled)
+        .help(label)
+        .accessibilityLabel(label)
+        .animation(Motion.bouncy, value: on)
+        .tileGlass(Circle(), interactive: true)
+    }
+}
+
+/// Tiles press in a little and spring back; the icon grows slightly on hover.
+private struct TileButton: ButtonStyle {
+    var shape = AnyShape(RoundedRectangle(cornerRadius: Tokens.radius, style: .continuous))
+    func makeBody(configuration: Configuration) -> some View { TileBody(configuration: configuration, shape: shape) }
+    private struct TileBody: View {
+        let configuration: Configuration
+        let shape: AnyShape
+        @Environment(\.isEnabled) private var enabled
+        @State private var hovering = false
+        var body: some View {
+            configuration.label
+                .background(shape.fill(Color.primary.opacity(hovering ? 0.05 : 0)))
+                .scaleEffect(configuration.isPressed && !Motion.reduced ? 0.965 : 1)
+                .opacity(enabled ? 1 : 0.45)
+                .animation(Motion.bouncy, value: configuration.isPressed)
+                .animation(Motion.fade, value: hovering)
+                .onHover { hovering = $0 && enabled }
+        }
+    }
+}
+
+/// Tiles drop in a few points and settle, one after another, when the menu
+/// opens (28ms apart, like Church Studio's menu bar panel). Runs once per
+/// open; with Reduce Motion they simply appear.
+private struct SettleIn: ViewModifier {
+    let index: Int
+    let shown: Bool
+    func body(content: Content) -> some View {
+        let still = Motion.reduced
+        content
+            .opacity(shown || still ? 1 : 0)
+            .scaleEffect(shown || still ? 1 : 0.96, anchor: .top)
+            .offset(y: shown || still ? 0 : -6)
+            .animation(still ? nil : .spring(duration: 0.52, bounce: 0.12).delay(Double(index) * 0.028), value: shown)
+    }
+}
+
+extension View {
+    fileprivate func settleIn(_ index: Int, shown: Bool) -> some View { modifier(SettleIn(index: index, shown: shown)) }
 }

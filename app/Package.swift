@@ -5,8 +5,14 @@ let package = Package(
     name: "AirPlaySplitter",
     platforms: [.macOS(.v14)],
     targets: [
+        .target(
+            name: "VirtualDisplayShim",
+            path: "Sources/VirtualDisplayShim",
+            linkerSettings: [.linkedFramework("CoreGraphics")]
+        ),
         .executableTarget(
             name: "AirPlaySplitter",
+            dependencies: ["VirtualDisplayShim"],
             path: "Sources/AirPlaySplitter",
             linkerSettings: [
                 .linkedFramework("ScreenCaptureKit"),

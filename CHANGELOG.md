@@ -1,17 +1,28 @@
 # Changelog
 
-## 0.6.2 · Unreleased
+## 0.7.0 · November 22, 2026
+
+### Added
+- **Extended Screen (1920×1080).** Choose it under Show › Second screen and your Mac gets a second screen,
+  exactly TV-shaped, as if you'd plugged in a TV. Drag slides, ProPresenter, Keynote or a browser onto it and
+  every TV shows that screen, while your own screen stays private for notes. No black bars on 16:9 TVs. It
+  appears in System Settings › Displays while in use and goes away when you pick another source.
 
 ### Fixed
 - Screen Recording permission now survives updates. Before, each new version looked like a different app to
   macOS, so sharing your screen stopped working even though System Settings still showed the switch on.
-  After installing 0.6.2, remove AirPlay Splitter from Screen & System Audio Recording (−) and allow it once
+  After installing 0.7.0, remove AirPlay Splitter from Screen & System Audio Recording (−) and allow it once
   more; future updates keep it.
 - The app notices a newly granted permission when you open the menu, instead of only at launch.
 
 ### Changed
 - Swiping between TVs, Content and Places now slides the pages side by side under your fingers, like panels
   already waiting to the right. No more fade or shrink; letting go settles on the nearest page.
+- The menu looks like Control Center, matching Church Studio's menu bar panel: no background at all, just
+  Liquid Glass tiles floating under the menu bar that settle in one after another when it opens. A Now Showing
+  tile with the preview, a wide Sound tile with round Blank and Stop All buttons, and TV icons in circles that
+  turn white when switched on. Quit is the power button at the top right. The menu is now its own panel, so it
+  always sits right under the menu bar and closes on a click elsewhere or Escape.
 - The whole menu feels more alive, following the Modern UI Jumpstart rules:
   - Switches feel physical: the knob stretches while held, springs across with a little overshoot, can be
     dragged, and taps the trackpad when it flips.
