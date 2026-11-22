@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.1 · Unreleased
+## 0.7.1 · November 22, 2026
 
 ### Fixed
 - TVs wouldn't connect if an older copy of the streaming engine was still running (after an update or a
