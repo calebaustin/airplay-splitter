@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1 · Unreleased
+
+### Fixed
+- TVs wouldn't connect if an older copy of the streaming engine was still running (after an update or a
+  crash). The app now clears any leftover engine when it starts.
+- Refresh really refreshes: TVs that don't answer within a few seconds (another building's TVs, unplugged
+  ones) drop off the list. Only a switched-on TV that dropped out stays, so you can see it reconnecting.
+- When a TV doesn't answer, the message says so in plain words: turn it on (not just standby) and check Wi-Fi.
+
 ## 0.7.0 · November 22, 2026
 
 ### Added

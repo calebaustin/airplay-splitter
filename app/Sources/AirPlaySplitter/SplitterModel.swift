@@ -283,12 +283,13 @@ final class SplitterModel: ObservableObject {
         KnownTV.save(known)
     }
 
-    /// Found TVs, plus remembered ones that were used before but aren't
-    /// visible right now (so a dropped Apple TV can still be switched on).
+    /// Found TVs, plus any switched-on TV that has dropped off the network
+    /// (so you can see it's reconnecting). TVs from other buildings don't
+    /// linger in the list; Places still remember them.
     private func mergeTVs() {
         for tv in discovered where known[KnownTV.key(for: tv)] != nil { remember(tv, used: false) }
         let foundKeys = Set(discovered.map(KnownTV.key(for:)))
-        let absent = known.filter { !foundKeys.contains($0.key) && $0.value.lastUsed != nil }.map(\.value.device)
+        let absent = known.filter { !foundKeys.contains($0.key) && selected.contains($0.value.ip) }.map(\.value.device)
         missing = Set(absent.map(\.ip))
         tvs = (discovered + absent)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -296,6 +297,7 @@ final class SplitterModel: ObservableObject {
 
     private func selectionChanged() {
         guard !isPreview else { return }
+        defer { mergeTVs() }   // a dropped TV that's switched off leaves the list
         if !selected.isEmpty {
             let keys = tvs.filter { selected.contains($0.ip) }.map(KnownTV.key(for:))
             UserDefaults.standard.set(keys, forKey: "lastGroup")
@@ -416,10 +418,20 @@ final class SplitterModel: ObservableObject {
                 if r?.needs_pin == true || r?.needs_credential == true || r?.state == "pin_required" {
                     self.pinFor = tv
                 } else if let e = r?.error, !e.isEmpty, !quiet {
-                    self.message = "\(tv.name): \(e)"
+                    self.message = Self.friendly(e, tv: tv.name)
                 }
             }
         }
+    }
+
+    /// Plain words for the network errors people actually hit.
+    static func friendly(_ error: String, tv: String) -> String {
+        let e = error.lowercased()
+        if e.contains("no route to host") || e.contains("connection refused") || e.contains("i/o timeout")
+            || e.contains("host is down") {
+            return "\(tv) didn't answer. Make sure the TV is on (not just in standby) and on the same Wi-Fi, then switch it on again."
+        }
+        return "\(tv): \(error)"
     }
 
     private func refresh() {
@@ -463,6 +475,15 @@ final class SplitterModel: ObservableObject {
         guard let bin = tool("doubletake") else {
             message = "doubletake binary not found"; return
         }
+        // An engine left over from an earlier run (a crash, or a copy that
+        // was replaced by an update) holds the socket, so ours would refuse
+        // to start and the app would talk to a stale one. Clear it first.
+        let sweep = Process()
+        sweep.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        sweep.arguments = ["-f", "Helpers/engine/AirPlay Splitter -daemonize"]
+        try? sweep.run()
+        sweep.waitUntilExit()
+        if sweep.terminationStatus == 0 { Thread.sleep(forTimeInterval: 0.5) }   // something was stopped
         let p = Process()
         p.executableURL = bin
         p.arguments = ["-daemonize", "-relay-port", String(Self.rtpPort),

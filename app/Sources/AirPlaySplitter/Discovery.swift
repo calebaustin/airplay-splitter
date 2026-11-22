@@ -13,15 +13,25 @@ final class Discovery: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
         browser.searchForServices(ofType: "_airplay._tcp.", inDomain: "local.")
     }
 
-    /// Looks again (the Refresh button). The current list stays in place so
-    /// the menu doesn't jump; TVs that are gone drop off as Bonjour reports them.
+    /// Looks again (the Refresh button). The list stays in place while
+    /// looking so the menu doesn't jump, then anything that didn't answer
+    /// (a TV in another building, one that's unplugged) is dropped.
     func restart() {
         browser.stop()
         pending.removeAll()
+        unconfirmed = Set(found.keys)
         start()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            guard let self, !self.unconfirmed.isEmpty else { return }
+            for name in self.unconfirmed { self.found[name] = nil }
+            self.unconfirmed = []
+            self.publish()
+        }
     }
+    private var unconfirmed: Set<String> = []
 
     func netServiceBrowser(_ b: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+        unconfirmed.remove(service.name)
         pending.insert(service)
         service.delegate = self
         service.resolve(withTimeout: 5)
@@ -42,6 +52,7 @@ final class Discovery: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
                 txt[k] = String(data: v, encoding: .utf8)
             }
         }
+        unconfirmed.remove(service.name)
         found[service.name] = DaemonClient.Device(
             name: service.name, model: txt["model"] ?? "", ip: ip,
             port: service.port, device_id: txt["deviceid"] ?? "")
