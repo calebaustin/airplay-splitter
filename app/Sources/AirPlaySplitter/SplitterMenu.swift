@@ -191,6 +191,23 @@ struct SplitterMenu: View {
         }
         .frame(width: 104, height: 58.5)
         .clipShape(RoundedRectangle(cornerRadius: Tokens.rowRadius, style: .continuous))
+        // On the extended screen: open a clickable window of it on this Mac.
+        .overlay(alignment: .bottomTrailing) {
+            if model.source == .extended {
+                Button { model.togglePiP() } label: {
+                    Image(systemName: model.pipOpen ? "pip.exit" : "pip.enter")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(.black.opacity(0.55)))
+                }
+                .buttonStyle(PagePillButton())
+                .padding(4)
+                .help(model.pipOpen ? "Close the extended screen window" : "Open the extended screen in a window you can click on")
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(Motion.snappy, value: model.source == .extended)
         .animation(Motion.fade, value: model.preview == nil || model.selected.isEmpty)
         .accessibilityLabel("Preview of what's being sent")
     }

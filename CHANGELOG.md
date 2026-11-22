@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.2 · Unreleased
+
+### Added
+- **Picture-in-picture of the Extended Screen.** While showing the Extended Screen, a PiP button sits on the
+  preview. Click it for a floating window of that screen on your MacBook, captured right on the Mac so it has
+  none of the TVs' delay. Click, drag, right-click and scroll in the window and it happens on the extended
+  screen, and the pointer stays with you. Typing goes to whatever you clicked. Sending clicks needs
+  Accessibility permission (macOS asks the first time); without it the window still shows the screen.
+
 ## 0.7.1 · November 22, 2026
 
 ### Fixed

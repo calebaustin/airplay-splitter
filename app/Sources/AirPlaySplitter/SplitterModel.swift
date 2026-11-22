@@ -510,6 +510,18 @@ final class SplitterModel: ObservableObject {
     /// The virtual 1920×1080 second screen, while it's the source.
     let extendedScreen = VirtualScreen()
 
+    /// The clickable picture-in-picture of the extended screen.
+    let pip = PiPController()
+    @Published private(set) var pipOpen = false
+
+    func togglePiP() {
+        guard source == .extended, let id = extendedScreen.displayID else { return }
+        pip.onClose = { [weak self] in self?.pipOpen = false }
+        pip.toggle(displayID: id)
+        pipOpen = pip.isOpen
+        if pipOpen { MenuPanelController.hideMenu() }
+    }
+
     /// Adds a 1920×1080 screen to the Mac (like plugging in a TV) and sends
     /// that to the TVs: drag slides, ProPresenter or a browser onto it while
     /// your own screen stays private. Exactly TV-shaped, so no black bars.
@@ -680,7 +692,7 @@ final class SplitterModel: ObservableObject {
         if source == .phones { blanked = false }   // phone video bypasses the app
         if old == .video, source != .video { video.pause() }
         if old == .web, source != .web { web.stop() }
-        if old == .extended, source != .extended { extendedScreen.remove() }
+        if old == .extended, source != .extended { pip.close(); extendedScreen.remove() }
         preview = nil
         saveSource()
         updateOutline()

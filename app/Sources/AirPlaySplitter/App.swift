@@ -39,6 +39,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let m = SplitterModel()
         model = m
         menu = MenuPanelController(model: m)
+        // Developer check: `--selftest-pip out.png` opens the PiP window of a
+        // temporary extended screen and saves a screenshot of that window.
+        if let j = CommandLine.arguments.firstIndex(of: "--selftest-pip"), j + 1 < CommandLine.arguments.count {
+            let out = CommandLine.arguments[j + 1]
+            Task { @MainActor in
+                let v = VirtualScreen()
+                guard await v.start(), let id = v.displayID else { print("no screen"); exit(1) }
+                let pip = PiPController()
+                pip.open(displayID: id)
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
+                   let w = content.windows.first(where: { $0.owningApplication?.processID == ProcessInfo.processInfo.processIdentifier && $0.title == "Extended Screen" }) {
+                    let cfg = SCStreamConfiguration(); cfg.width = Int(w.frame.width * 2); cfg.height = Int(w.frame.height * 2)
+                    if let img = try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: w), configuration: cfg) {
+                        try? NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
+                    }
+                }
+                pip.close(); v.remove()
+                exit(0)
+            }
+        }
         // Developer check: `--selftest-extended out.txt` adds the virtual
         // screen, captures one frame of it and writes what it found.
         if let j = CommandLine.arguments.firstIndex(of: "--selftest-extended"), j + 1 < CommandLine.arguments.count {
