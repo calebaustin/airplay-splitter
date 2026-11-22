@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.2 · Unreleased
+## 0.7.2 · November 22, 2026
 
 ### Added
 - **Picture-in-picture of the Extended Screen.** While showing the Extended Screen, a PiP button sits on the
