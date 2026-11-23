@@ -40,6 +40,27 @@ right (with arrows) between pages:
 
 - Places (saved TV groups, recognized by the TVs on the network, no location permission) and schedules.
 
+## Steady stream on every TV (planned Nov 23, 2026)
+
+Goal: every TV gets a smooth, even flow of video whether it's on wired Ethernet, busy church Wi-Fi or a
+peer-to-peer Apple TV, and a slow TV never disconnects or holds back the others.
+
+1. **Never disconnect a slow TV.** *(Done in 0.7.3.)* Each TV has a one-second cushion; a TV that falls
+   further behind skips to the next keyframe (every half second) instead of hanging up and reconnecting.
+2. **Smooth the bursts at the source.** A slide change makes one frame many times larger than the rest,
+   which is what overwhelms Wi-Fi TVs. Cap the encoder's peak data rate (VideoToolbox data-rate limits,
+   about 1.5× the average over any half second) so a slide change spreads over a few frames instead of one
+   spike. Send the app's own encoded stream straight through instead of encoding twice.
+3. **Pace the packets.** Send each frame's packets spread across the frame time instead of all at once, so
+   routers and TVs see a steady trickle rather than bursts.
+4. **Slides-aware mode.** When the picture is still (slides, holding screen, countdown), send fewer frames
+   with high quality and a keyframe right after each change; go back to full motion for video.
+5. **Measure each TV's link.** Track how fast each TV takes data. Show "Weak connection" on its row, and
+   if one TV is persistently slow, give it its own lower-bitrate stream (one extra hardware encoder) so the
+   rest keep full quality.
+6. **Prefer the best path.** When a TV is reachable both over the network and peer-to-peer, pick the one
+   with better throughput.
+
 ## Next: bigger pieces
 
 | Feature | Notes and trade-offs |

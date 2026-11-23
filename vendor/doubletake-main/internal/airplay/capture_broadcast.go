@@ -25,7 +25,15 @@ const (
 	// sustained backlog disconnects only that receiver instead. Byte and chunk
 	// bounds still cap memory independently; single-target handoff still waits
 	// with just one pending AU.
-	broadcastSinkFrameQueueDuration = 250 * time.Millisecond
+	//
+	// AirPlay Splitter: a full second, and a receiver that still falls behind
+	// (Wi-Fi TVs on a slide change) skips ahead to the next keyframe instead
+	// of being disconnected. See enqueueFrame.
+	broadcastSinkFrameQueueDuration = 1000 * time.Millisecond
+
+	// After skipping, resume at the next IDR; if none arrives in this many
+	// frames (an encoder without periodic IDRs), resume anyway.
+	broadcastSinkMaxSkipFrames = 90
 
 	// Source shutdown normally races with consumers draining their last few
 	// buffers. Do not let a receiver that stopped reading keep Run alive forever.
@@ -85,6 +93,8 @@ type BroadcastSink struct {
 	// queuedFrameDuration is a nominal sample-duration sum. It deliberately does
 	// not use the PTS span: source-frame dropping makes that span discontinuous.
 	queuedFrameDuration time.Duration
+	skipping            bool // dropping frames until the next keyframe
+	skippedFrames       int
 	frameDuration       time.Duration
 
 	maxQueuedBytes  int
@@ -421,9 +431,36 @@ func (s *BroadcastSink) enqueueFrame(frame VideoAccessUnit) error {
 			s.blockedProducers--
 			continue
 		}
+		if !s.backpressure && s.skipping {
+			// Waiting for a clean restart point; drop everything until then.
+			if !annexBHasH264IDR(frame.AnnexB) && s.skippedFrames < broadcastSinkMaxSkipFrames {
+				s.skippedFrames++
+				return nil
+			}
+			s.skipping = false
+			s.skippedFrames = 0
+		}
 		if s.frameQueueExceedsLimitsLocked(frame) {
-			s.abortLocked(errBroadcastSinkBacklog)
-			return errBroadcastSinkBacklog
+			if s.backpressure {
+				s.abortLocked(errBroadcastSinkBacklog)
+				return errBroadcastSinkBacklog
+			}
+			// This receiver can't keep up right now. Drop what it hasn't sent
+			// and pick up again at the next keyframe, so the TV freezes for a
+			// moment instead of disconnecting and reconnecting.
+			for i := range s.frameQueue {
+				s.frameQueue[i].AnnexB = nil
+			}
+			s.frameQueue = s.frameQueue[:0]
+			s.queuedBytes = 0
+			s.queuedFrameDuration = 0
+			if annexBHasH264IDR(frame.AnnexB) {
+				break // this frame is itself a restart point
+			}
+			s.skipping = true
+			s.skippedFrames = 1
+			dbg("[broadcast] receiver fell behind; skipping to next keyframe")
+			return nil
 		}
 		break
 	}
@@ -607,4 +644,25 @@ func (s *BroadcastSink) Close() {
 		return
 	}
 	s.abort()
+}
+
+// annexBHasH264IDR reports whether an Annex B H.264 access unit contains an
+// IDR slice (NAL type 5), a point a decoder can restart from cleanly.
+func annexBHasH264IDR(b []byte) bool {
+	for i := 0; i+3 < len(b); i++ {
+		if b[i] == 0 && b[i+1] == 0 {
+			if b[i+2] == 1 {
+				if b[i+3]&0x1F == 5 {
+					return true
+				}
+				i += 2
+			} else if b[i+2] == 0 && i+4 < len(b) && b[i+3] == 1 {
+				if b[i+4]&0x1F == 5 {
+					return true
+				}
+				i += 3
+			}
+		}
+	}
+	return false
 }

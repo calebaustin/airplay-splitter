@@ -2,6 +2,11 @@
 
 ## 0.7.3 · Unreleased
 
+### Fixed
+- TVs on Wi-Fi no longer drop off and reconnect on a slide change. Each TV now has a one-second cushion,
+  and one that still falls behind skips ahead to the next keyframe (at most half a second away) instead
+  of disconnecting. A peer-to-peer Apple TV that keeps up isn't affected.
+
 ### Added
 - **Direct Connect Apple TVs.** Apple TVs that macOS reaches peer-to-peer (listed under "Show More" in
   Screen Mirroring, often named like AMB-247C3787) now appear in the TV list and stream like any other,
