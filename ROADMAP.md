@@ -47,7 +47,9 @@ peer-to-peer Apple TV, and a slow TV never disconnects or holds back the others.
 
 1. **Never disconnect a slow TV.** *(Done in 0.7.3.)* Each TV has a one-second cushion; a TV that falls
    further behind skips to the next keyframe (every half second) instead of hanging up and reconnecting.
-2. **Smooth the bursts at the source.** A slide change makes one frame many times larger than the rest,
+2. **Smooth the bursts at the source.** *(Partly done in 0.7.3: one keyframe per second instead of two,
+   about 38% less data on slides. The encoder ignores data-rate limits when run through GStreamer, so the
+   rest needs the pass-through below, where the app's own encoder can apply Apple's rate limits.)* A slide change makes one frame many times larger than the rest,
    which is what overwhelms Wi-Fi TVs. Cap the encoder's peak data rate (VideoToolbox data-rate limits,
    about 1.5× the average over any half second) so a slide change spreads over a few frames instead of one
    spike. Send the app's own encoded stream straight through instead of encoding twice.

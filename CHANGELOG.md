@@ -6,6 +6,9 @@
 - TVs on Wi-Fi no longer drop off and reconnect on a slide change. Each TV now has a one-second cushion,
   and one that still falls behind skips ahead to the next keyframe (at most half a second away) instead
   of disconnecting. A peer-to-peer Apple TV that keeps up isn't affected.
+- Steadier stream for slides: a full keyframe goes out once a second instead of twice. On slides that
+  change every few seconds this cuts the data sent by about 38% and the big bursts by about 40%, so busy
+  Wi-Fi TVs have far less to catch up on.
 
 ### Added
 - **Direct Connect Apple TVs.** Apple TVs that macOS reaches peer-to-peer (listed under "Show More" in

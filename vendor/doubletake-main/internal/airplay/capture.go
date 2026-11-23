@@ -2576,9 +2576,12 @@ func keyframeIntervalFrames(fps int) int {
 	// encoder's initial IDR. The protocol lets a receiver request an immediate
 	// bitstream restart, but gst-launch does not expose that upstream encoder event
 	// to its parent process. Keep a nearby periodic random-access point instead.
-	// This bounds startup and decoder recovery to half a second without making
-	// every frame intra-coded.
-	return max(1, (fps+1)/2)
+	// AirPlay Splitter: one keyframe per second. Each keyframe is a burst many
+	// times larger than the frames between, so every half second (the old
+	// value) made slides, which barely change, cost ~60% more and burst twice
+	// as often on Wi-Fi TVs. Startup, late joiners and a TV skipping ahead after
+	// falling behind still recover within a second.
+	return max(1, fps)
 }
 
 // vbvBufferKbit returns the x264 VBV buffer size in kbit for the given bitrate

@@ -31,7 +31,7 @@ const (
 	// of being disconnected. See enqueueFrame.
 	broadcastSinkFrameQueueDuration = 1000 * time.Millisecond
 
-	// After skipping, resume at the next IDR; if none arrives in this many
+	// After skipping, resume at the next IDR (at most a second away); if none arrives in this many
 	// frames (an encoder without periodic IDRs), resume anyway.
 	broadcastSinkMaxSkipFrames = 90
 
