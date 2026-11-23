@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.4 · Unreleased
+## 0.7.4 · November 23, 2026
 
 ### Added
 - **Settings page** (the gear after Places) with a **Stream** choice:
