@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.3 · Unreleased
+## 0.7.3 · November 23, 2026
 
 ### Fixed
 - TVs on Wi-Fi no longer drop off and reconnect on a slide change. Each TV now has a one-second cushion,
