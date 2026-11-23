@@ -180,6 +180,44 @@ final class SplitterModel: ObservableObject {
     private let stateDir: URL
     private let client: DaemonClient
     private var daemon: Process?
+
+    /// How often a full keyframe is sent: a trade between steady, light
+    /// streams for slides and quick recovery for moving video.
+    enum StreamMode: String, CaseIterable, Identifiable {
+        case slides, balanced, video
+        var id: String { rawValue }
+        var title: String { switch self { case .slides: "Slides"; case .balanced: "Balanced"; case .video: "Video" } }
+        var symbol: String { switch self { case .slides: "rectangle.on.rectangle.angled"; case .balanced: "dial.medium"; case .video: "film" } }
+        var keyframeSeconds: Double { switch self { case .slides: 2; case .balanced: 1; case .video: 0.5 } }
+        var detail: String {
+            switch self {
+            case .slides: "Lightest, steadiest stream. Best for slides, lyrics and still pages on busy Wi-Fi. A TV that falls behind can take up to 2 seconds to catch up."
+            case .balanced: "Good for a mix of slides and short clips. A TV that falls behind catches up within a second."
+            case .video: "Quickest recovery for moving video. Sends more data, so it's best on strong Wi-Fi or wired TVs."
+            }
+        }
+    }
+    @Published var streamMode: StreamMode =
+        StreamMode(rawValue: UserDefaults.standard.string(forKey: "streamMode") ?? "") ?? .balanced {
+        didSet {
+            guard streamMode != oldValue, !isPreview else { return }
+            UserDefaults.standard.set(streamMode.rawValue, forKey: "streamMode")
+            restartEngine()
+        }
+    }
+
+    /// Starts the engine again with the current settings and reconnects the
+    /// TVs that were on (each drops for a moment).
+    private func restartEngine() {
+        daemon?.interrupt()
+        daemon?.waitUntilExit()
+        daemon = nil
+        startDaemon()
+        let on = tvs.filter { selected.contains($0.ip) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            for tv in on { self?.connect(tv, pin: nil, quiet: true) }
+        }
+    }
     private var uxplay: Process?
     private let streamer = ScreenStreamer(rtpPort: rtpPort, audioPort: audioPort)
     private var capturing = false
@@ -488,6 +526,7 @@ final class SplitterModel: ObservableObject {
         p.executableURL = bin
         p.arguments = ["-daemonize", "-relay-port", String(Self.rtpPort),
                        "-relay-audio-port", String(Self.audioPort),
+                       "-keyframe-seconds", String(streamMode.keyframeSeconds),
                        "-socket", client.socketPath, "-port-range", "60000-60020"]
         p.environment = toolEnvironment()
         let log = stateDir.appendingPathComponent("doubletake.log")

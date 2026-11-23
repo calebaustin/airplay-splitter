@@ -135,6 +135,7 @@ func main() {
 	x11WindowName := flag.String("x11-window-name", "", "X11 window name to capture; prefer -x11-window-id")
 	noCursor := flag.Bool("no-cursor", false, "Don't show the mouse cursor in the captured video")
 	relayPort := flag.Int("relay-port", 0, "AirPlay Splitter: relay H.264 RTP from UxPlay -vrtp on this localhost UDP port instead of capturing the screen")
+	keyframeSeconds := flag.Float64("keyframe-seconds", 0, "AirPlay Splitter: seconds between keyframes (0 = default of one per second); longer suits slides, shorter suits video")
 	relayAudioPort := flag.Int("relay-audio-port", 0, "AirPlay Splitter: relay L16 RTP audio (44.1 kHz stereo) from this localhost UDP port; without it, -relay-port implies -no-audio")
 	flag.Parse()
 	if *showVersion {
@@ -143,6 +144,7 @@ func main() {
 	}
 	if *relayPort > 0 {
 		airplay.RelayRTPPort = *relayPort
+		airplay.KeyframeIntervalSeconds = *keyframeSeconds
 		*testMode = true // reuse the capture-free source path
 		airplay.VideoOnlyAudioFallback = true
 		if *relayAudioPort > 0 {

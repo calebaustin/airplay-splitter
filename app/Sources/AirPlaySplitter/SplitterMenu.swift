@@ -44,7 +44,7 @@ struct SplitterMenu: View {
     @Namespace private var pill
     /// Tiles settle in one after another each time the menu opens.
     @State private var shown = false
-    private let pages = ["TVs", "Content", "Places"]
+    private let pages = ["TVs", "Content", "Places", "Settings"]
     /// The page to reopen on.
     @MainActor static var lastPage = 0
 
@@ -71,7 +71,7 @@ struct SplitterMenu: View {
                 // slides the row under your fingers, and letting go settles
                 // on the nearest page. Nothing fades or resizes.
                 HStack(alignment: .top, spacing: Tokens.gap) {
-                    pageView(0); pageView(1); pageView(2)
+                    pageView(0); pageView(1); pageView(2); pageView(3)
                 }
                 .offset(x: -CGFloat(page) * Self.pageStride + drag)
                 .frame(width: Self.pageWidth, height: Tokens.pageCap, alignment: .topLeading)
@@ -259,7 +259,8 @@ struct SplitterMenu: View {
                 switch i {
                 case 0: receiversSection
                 case 1: ContentPage(model: model)
-                default: PlacesPage(model: model)
+                case 2: PlacesPage(model: model)
+                default: SettingsPage(model: model)
                 }
             } else {
                 Color.clear
@@ -338,7 +339,14 @@ struct SplitterMenu: View {
             ForEach(pages.indices, id: \.self) { i in
                 let on = shownPage == i
                 Button { turn(to: i) } label: {
-                    Text(pages[i])
+                    // Settings is a gear so the bar stays on one line.
+                    Group {
+                        if pages[i] == "Settings" {
+                            Image(systemName: "gearshape.fill").accessibilityLabel("Settings")
+                        } else {
+                            Text(pages[i]).lineLimit(1)
+                        }
+                    }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(on ? .primary : .secondary)
                         .padding(.horizontal, 10).padding(.vertical, 3)

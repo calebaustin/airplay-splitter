@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.4 · Unreleased
+
+### Added
+- **Settings page** (the gear after Places) with a **Stream** choice:
+  - **Slides:** a keyframe every 2 seconds. The lightest, steadiest stream for slides, lyrics and still
+    pages on busy Wi-Fi.
+  - **Balanced** (default): one per second, for a mix of slides and short clips.
+  - **Video:** every half second, for the quickest recovery with moving video on strong Wi-Fi or wired TVs.
+  Changing it reconnects the TVs for a moment.
+
 ## 0.7.3 · November 23, 2026
 
 ### Fixed

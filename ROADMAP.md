@@ -55,7 +55,8 @@ peer-to-peer Apple TV, and a slow TV never disconnects or holds back the others.
    spike. Send the app's own encoded stream straight through instead of encoding twice.
 3. **Pace the packets.** Send each frame's packets spread across the frame time instead of all at once, so
    routers and TVs see a steady trickle rather than bursts.
-4. **Slides-aware mode.** When the picture is still (slides, holding screen, countdown), send fewer frames
+4. **Slides-aware mode.** *(Manual version done in 0.7.4: Settings › Stream with Slides, Balanced and
+   Video. Automatic switching by source is still to do.)* When the picture is still (slides, holding screen, countdown), send fewer frames
    with high quality and a keyframe right after each change; go back to full motion for video.
 5. **Measure each TV's link.** Track how fast each TV takes data. Show "Weak connection" on its row, and
    if one TV is persistently slow, give it its own lower-bitrate stream (one extra hardware encoder) so the

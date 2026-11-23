@@ -40,6 +40,10 @@ var dropH264SEI atomic.Bool
 // Set it before preparing capture; the daemon's -test path then relays instead.
 var RelayRTPPort int
 
+// KeyframeIntervalSeconds, when set, overrides the default of one keyframe
+// per second (AirPlay Splitter's Slides / Balanced / Video stream setting).
+var KeyframeIntervalSeconds float64
+
 // relaySourceStages depayloads and decodes the relayed stream so the regular
 // doubletake encoder path (scale to each receiver's canvas, fixed keyframe
 // interval) applies unchanged.

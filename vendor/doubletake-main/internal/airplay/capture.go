@@ -2581,6 +2581,9 @@ func keyframeIntervalFrames(fps int) int {
 	// value) made slides, which barely change, cost ~60% more and burst twice
 	// as often on Wi-Fi TVs. Startup, late joiners and a TV skipping ahead after
 	// falling behind still recover within a second.
+	if KeyframeIntervalSeconds > 0 {
+		return max(1, int(float64(fps)*KeyframeIntervalSeconds+0.5))
+	}
 	return max(1, fps)
 }
 
