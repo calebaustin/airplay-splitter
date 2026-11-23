@@ -85,7 +85,7 @@ func (c *AirPlayClient) dialMediaDataControl(port int, seed uint64) (*eventChann
 		return nil, fmt.Errorf("media data control requires a pair-verify shared secret")
 	}
 	address := net.JoinHostPort(c.sessionPeerHost(), strconv.Itoa(port))
-	conn, err := net.DialTimeout("tcp", address, 3*time.Second)
+	conn, err := dialTCP(address, 3*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("dial media data control %s: %w", address, err)
 	}

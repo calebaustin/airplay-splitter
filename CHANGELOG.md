@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.3 · Unreleased
+
+### Added
+- **Direct Connect Apple TVs.** Apple TVs that macOS reaches peer-to-peer (listed under "Show More" in
+  Screen Mirroring, often named like AMB-247C3787) now appear in the TV list and stream like any other,
+  even when they're not on the building's network.
+
 ## 0.7.2 · November 22, 2026
 
 ### Added

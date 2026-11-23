@@ -520,7 +520,7 @@ func withHeader(hdrs map[string]string, key, value string) map[string]string {
 
 func (c *AirPlayClient) Connect(ctx context.Context) error {
 	addr := net.JoinHostPort(c.host, fmt.Sprintf("%d", c.port))
-	d := net.Dialer{Timeout: 10 * time.Second}
+	d := net.Dialer{Timeout: 10 * time.Second, Control: anyIfControl}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("dial %s: %w", addr, err)

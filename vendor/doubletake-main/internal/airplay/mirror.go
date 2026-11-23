@@ -1380,7 +1380,7 @@ func (c *AirPlayClient) setupMirrorSessionAttempt(ctx context.Context, cfg Strea
 
 	// Connect to the video data port
 	dataAddr := net.JoinHostPort(c.sessionPeerHost(), strconv.Itoa(dataPort))
-	dataConn, err = net.DialTimeout("tcp", dataAddr, 5*time.Second)
+	dataConn, err = dialTCP(dataAddr, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("connect data port %s: %w", dataAddr, err)
 	}
@@ -2913,14 +2913,14 @@ func allocateConsecutiveUDPPortsInRange(count, portMin, portMax int) ([]net.Pack
 // base+1, base+2, ... Returns the conns and whether all binds succeeded;
 // caller is responsible for closing partial results on failure.
 func tryConsecutiveUDP(base, count int) ([]net.PacketConn, bool) {
-	first, err := net.ListenPacket("udp", fmt.Sprintf(":%d", base))
+	first, err := listenPacket("udp", fmt.Sprintf(":%d", base))
 	if err != nil {
 		return nil, false
 	}
 	actualBase := first.LocalAddr().(*net.UDPAddr).Port
 	conns := []net.PacketConn{first}
 	for i := 1; i < count; i++ {
-		c, err := net.ListenPacket("udp", fmt.Sprintf(":%d", actualBase+i))
+		c, err := listenPacket("udp", fmt.Sprintf(":%d", actualBase+i))
 		if err != nil {
 			return conns, false
 		}
